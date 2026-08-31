@@ -1,0 +1,23 @@
+{
+  "name": "lean-testing-platform",
+  "version": "1.0.0",
+  "description": "Lean Load Testing & Playwright Platform with Single Dashboard Control",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "tsc",
+    "start": "node dist/src/server.js",
+    "dashboard": "node dist/src/server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "playwright": "^1.62.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.13.5",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.7"
+  }
+}

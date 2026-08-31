@@ -1,0 +1,29 @@
+# Node dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+dist/
+build/
+.svelte-kit/
+
+# Database files
+data/*.db
+data/*.db-wal
+data/*.db-shm
+
+# Test runtime reports & generated screenshots (keep .gitkeep if needed)
+reports/
+coverage/
+.tempmediaStorage/
+
+# Environment & local secrets
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
