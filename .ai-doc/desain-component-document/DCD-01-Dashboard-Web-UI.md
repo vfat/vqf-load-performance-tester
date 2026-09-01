@@ -17,19 +17,21 @@
   * `Timeline: E2E Step Execution Timeline` — List timeline eksekusi per-langkah beserta status pass/fail.
   * `Gallery: Visual Evidence Screenshot Gallery` — Frame tangkapan layar bukti nyata dari halaman web target.
 * `Deck 2 (REST API Load Deck UI)`:
-  * `Form: API Chaining & Load Control Bar` — Form konfigurasi multi-endpoint, parameter Virtual Users (`#vu-slider`), duration (`#test-duration`), load profile dropdown (`#load-profile`), method (`#http-method`).
+  * `Builder: Visual Postman-like Request Builder` — Visual step builder untuk merangkai request multi-endpoint (Method badge selector, URL input, expandable Headers, Request Body JSON editor, Variable Extraction rules `{{var}}`, Status Code & JSON Path Assertions).
+  * `Presets: API Workflow Presets` — Tombol preset instan (*Auth Token Flow*, *CRUD Pipeline*, *Throughput Benchmark*).
+  * `Form: Load Control Bar` — Slider & Number Input sinkron Virtual Users (`1–1.000 VUs`), duration (`#test-duration`), load profile dropdown (`#load-profile`).
   * `Card: Telemetry Stats Row` — Kartu RPS, p95 Latency, Active VUs, Total Requests, Error Rate.
   * `Chart: Live Telemetry Stream` — Visualisasi interaktif ApexCharts multi-series (RPS, Latensi p95, Active VUs).
   * `Panel: 12-Metrics Load Summary Panel` — Panel metrik post-test run (p50, p90, p95, p99, min/max, throughput, error rate).
 * `Shared UI Elements`:
   * `Screen: Topbar Header` — Baris brand header dengan status dot running indicator dan tombol Theme Toggle (`#theme-toggle`).
   * `Table: SQLite History Table` — Tabel render riwayat eksekusi test run terurut.
-  * `Modal: Run History Inspector` — Dialog overlay modal detail eksekusi run dan screenshot target.
+  * `Modal: Run History Inspector` — Dialog overlay modal detail eksekusi run, screenshot target, serta tombol `[📄 DOWNLOAD HTML REPORT]` dan `[📥 DOWNLOAD JSON DATA]`.
 
 ### Control (Logika & Handler Proses)
 * `Handler: DeckSwitcher` — Pengatur switching visibilitas aktif antara Deck 1 (E2E) dan Deck 2 (API Load).
 * `Handler: E2EStepBuilderHandler` — Handler penambahan/pengurangan langkah DOM browser Playwright.
-* `Handler: ApiChainingBuilderHandler` — Handler konfigurasi alur REST API multi-endpoint dan ekstraksi token.
+* `Handler: PostmanApiBuilderHandler` — Handler visual step builder API multi-endpoint, ekstraksi token, dan interpolasi variabel.
 * `Handler: TelemetrySseListener` — Handler `EventSource('/api/metrics/stream')` penerima event `telemetry`, `scenario_completed`, `screenshot_captured`, `run_completed`, `run_aborted`.
 * `Handler: RunSubmitHandler` — Form submit interceptor yang mem-POST payload konfigurasi uji ke `/api/runs`.
 * `Handler: AbortHandler` — Click interceptor tombol abort yang mem-POST `/api/runs/abort`.
@@ -40,6 +42,8 @@
 * `Entity: Endpoint GET /api/status` — Engine status snapshot JSON.
 * `Entity: Endpoint GET /api/runs` — Daftar riwayat test runs JSON.
 * `Entity: Endpoint GET /api/runs/:id` — Detail run, execution steps, dan metric points JSON.
+* `Entity: Endpoint GET /api/runs/:id/export/json` — Download berkas statis `summary.json`.
+* `Entity: Endpoint GET /api/runs/:id/export/html` — Download berkas statis `report.html` offline.
 * `Entity: Endpoint POST /api/runs` — Trigger dispatch run JSON contract.
 * `Entity: Endpoint POST /api/runs/abort` — Sinyal emergency cancel JSON contract.
 * `Entity: Endpoint GET /api/screenshots/:filename` — Binary image PNG stream.

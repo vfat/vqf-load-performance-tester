@@ -8,11 +8,11 @@
 
 ## 1. Context
 
-HTTP Load Generator & Quantiles Engine bertugas secara khusus untuk **Deck 2: REST API Load Deck**. Menjalankan pengujian beban volume tinggi asinkron dengan Virtual Users (1–100 VUs), profil beban (`fixed`, `ramp-up`, `spike`), kalkulasi kuantil latensi (p50..p99), serta eksekusi request REST API berantai (*API Chaining* dengan ekstraksi token/variabel `{{var}}`).
+HTTP Load Generator & Quantiles Engine bertugas secara khusus untuk **Deck 2: REST API Load Deck**. Menjalankan pengujian beban volume tinggi asinkron dengan Virtual Users (1–1.000 VUs), profil beban (`fixed`, `ramp-up`, `spike`), kalkulasi kuantil latensi (p50..p99), serta eksekusi request REST API berantai (*Multi-Endpoint Chaining* mirip Postman dengan setup per-request: method, headers, payload, dan ekstraksi token/variabel `{{var}}`).
 
 Posisi dalam sistem:
 * Menerima konfigurasi beban dan API Chaining dari Test Orchestrator (`engine.ts`).
-* Mengirimkan request HTTP asinkron nyata secara paralel tanpa overhead rendering DOM browser.
+* Menjalankan eksekusi berantai multi-endpoint secara paralel untuk setiap virtual user (hingga 1.000 VUs) dengan HTTP Connection Pooling & Keep-Alive.
 * Menghitung metrik kuantil latensi (nearest rank), RPS, dan error rate per detik (*ticks*).
 * Menyusun ringkasan akhir (*final summary*) 12 metrik performa.
 
@@ -21,14 +21,15 @@ Posisi dalam sistem:
 ## 2. Scope
 
 ### In-Scope:
-* Pengiriman request HTTP asinkron nyata dengan timeout guard per-koneksi.
-* Skalabilitas Virtual Users (1–100 VUs) dan durasi (5–300 detik).
+* Pengiriman request HTTP asinkron nyata dengan timeout guard dan HTTP Agent Keep-Alive (mendukung hingga 1.000 concurrent sockets).
+* Skalabilitas Virtual Users (1–1.000 VUs) dan durasi (5–300 detik).
 * Algoritma profil beban: `fixed` (konstan), `ramp-up` (linier naik), `spike` (lonjakan traffic).
 * Perhitungan statistik latensi: `Min`, `Max`, `Avg`, `p50 (Median)`, `p90`, `p95`, `p99`.
-* Alur REST API Chaining:
-  * Step 1: POST Login ➔ Ekstrak variabel JSON (`extractVars: { "authToken": "body.token" }`).
-  * Step 2: GET Profile ➔ Injeksi header `Authorization: Bearer {{authToken}}`.
-  * Step 3: Assert HTTP Status Code & JSON response path.
+* Alur Visual Postman-like REST API Chaining:
+  * Setup mandiri per-step: Method (`GET`, `POST`, `PUT`, `DELETE`, `PATCH`), URL, Headers, Body JSON.
+  * Ekstraksi variabel respons dinamis (misal: `extractVars: { "authToken": "data.token" }` atau `userId: "data.user.id"`).
+  * Substitusi variabel `{{authToken}}` pada URL, header, dan payload langkah berikutnya secara independen per-VU.
+  * Asersi HTTP Status Code & JSON response path.
 * Responsif terhadap sinyal abort darurat via `AbortSignal`.
 
 ### Out-of-Scope:

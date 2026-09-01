@@ -10,13 +10,14 @@
 ## 1. Object Identification
 
 ### Boundary
-* `Interface: HttpLoadConfig` — Konfigurasi pengujian beban (`targetUrl`, `httpMethod`, `virtualUsers`, `durationSeconds`, `loadProfile`, `requestTimeoutMs`, `abortSignal`).
+* `Interface: HttpLoadConfig` — Konfigurasi pengujian beban (`targetUrl`, `httpMethod`, `virtualUsers`, `durationSeconds`, `loadProfile`, `requestTimeoutMs`, `abortSignal`, `chainSteps?: ApiStepDefinition[]`).
 * `Callback: onTick(metrics)` — Callback event per-detik penghasil snapshot metrik.
 
 ### Control
-* `Control: HttpLoadWorker` — Kelas traffic generator yang mengeksekusi request HTTP paralel nyata per-detik.
+* `Control: HttpLoadWorker` — Kelas traffic generator yang mengeksekusi request HTTP paralel nyata per-detik (hingga 1.000 VUs) dengan HTTP Keep-Alive pooling.
 * `Control: VUScalingAlgorithm (getActiveVUs)` — Algoritma penentu jumlah VU aktif per detik berdasarkan profil (`fixed`, `ramp-up`, `spike`).
 * `Control: TimedFetchExecutor` — Wrapper fungsi `fetch()` native dengan timer latensi milidetik dan listener `AbortSignal`.
+* `Control: ChainedScenarioWorker` — Worker eksekusi skenario API multi-endpoint berurutan per-VU dengan ekstraksi token `{{var}}`.
 * `Control: QuantileCalculator (calculateQuantiles)` — Fungsi kalkulator persentil statistik (`Min`, `Max`, `p50`, `p90`, `p95`, `p99`) dengan formula nearest rank.
 * `Control: ArtilleryRunner` — Modul agregator hasil respons beban.
 
@@ -32,9 +33,10 @@
 | No | Use Case Name | Actor | Status | Detail |
 |---|---|---|---|---|
 | 1 | `UC-LOAD-01` — Generate Real HTTP Traffic by Profile | Orchestrator | Active | Section 3.1 |
-| 2 | `UC-LOAD-02` — Scale Virtual Users Dynamically | HttpLoadWorker | Active | Section 3.2 |
+| 2 | `UC-LOAD-02` — Scale Virtual Users Dynamically (Up to 1.000 VUs) | HttpLoadWorker | Active | Section 3.2 |
 | 3 | `UC-LOAD-03` — Compute Latency Quantiles (Nearest Rank) | ArtilleryRunner | Active | Section 3.3 |
 | 4 | `UC-LOAD-04` — Handle Request Timeout & Abort | TimedFetchExecutor | Active | Section 3.4 |
+| 5 | `UC-LOAD-05` — Execute Multi-Endpoint Chained Load Scenario | ChainedScenarioWorker | Planned | Section 3.5 |
 
 ---
 
