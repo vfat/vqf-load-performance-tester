@@ -18,12 +18,12 @@
 
 | Metric | Count |
 |---|---:|
-| Total targets | 9 |
+| Total targets | 10 |
 | PLANNED | 0 |
 | RED | 0 |
 | GREEN | 0 |
 | REFACTORING | 0 |
-| REFACTORED | 9 |
+| REFACTORED | 10 |
 | BLOCKED | 0 |
 | EXCEPTION | 0 |
 
@@ -42,6 +42,7 @@
 | `TDD-007` | PlaywrightStepExecutor | Deck 1 Playwright E2E step-by-step DOM actions | Executes sequential DOM steps (GOTO, CLICK, FILL, WAIT, ASSERT_TEXT, SCREENSHOT), captures on-failure screenshot, reports timeline | `tests/playwright-step-executor.test.ts` | `REFACTORED` | `4 passed (6756ms), exit 0` | Deck 1 E2E Studio Engine |
 | `TDD-008` | ApiChainingExecutor | Deck 2 REST API chaining & variable interpolation | Executes chained HTTP requests, extracts variables (e.g. {{token}}), performs status & JSON path assertions | `tests/api-chaining-executor.test.ts` | `REFACTORED` | `2 passed (66ms), exit 0` | Deck 2 REST API Engine |
 | `TDD-009` | CliTestRunner | Headless CLI test runner for CI/CD automation | Parses flags (--mode, --url, --vus, --scenario), executes headless E2E & API load tests, emits terminal tables, returns proper exit codes | `tests/cli-runner.test.ts` | `REFACTORED` | `5 passed (5577ms), exit 0` | Headless CLI Automation |
+| `TDD-010` | ReportGenerator | Static standalone HTML and JSON report export | Generates structured JSON summary, standalone self-contained offline HTML report, updates SQLite paths, and handles HTTP export downloads | `tests/report-generator.test.ts` | `REFACTORED` | `3 passed (71ms), exit 0` | Standalone Export Engine |
 
 ---
 

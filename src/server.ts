@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { SqliteHistoryRepository } from './lib/server/storage.js';
 import { TestExecutionEngine } from './lib/server/engine.js';
+import { ReportGenerator } from './lib/server/report-generator.js';
 import crypto from 'node:crypto';
 
 export interface DashboardServerOptions {
@@ -1373,7 +1374,13 @@ export function generateDashboardHtml(): string {
             <div><strong>Total Requests:</strong> \${r.totalRequests || execs.length}</div>
             <div><strong>Avg Latency:</strong> \${r.avgLatencyMs ? Math.round(r.avgLatencyMs) + ' ms' : '-'}</div>
           </div>
-          <h4 style="font-family:var(--font-display); font-size:1.25rem; text-transform:uppercase;">Execution Steps (\${execs.length})</h4>
+
+          <div style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-top:0.25rem;">
+            <a href="/api/runs/\${r.id}/export/html" download="report-\${r.id}.html" class="btn btn-primary" style="text-decoration:none; font-size:0.875rem; padding:6px 14px;">📄 DOWNLOAD HTML REPORT</a>
+            <a href="/api/runs/\${r.id}/export/json" download="summary-\${r.id}.json" class="btn btn-secondary" style="text-decoration:none; font-size:0.875rem; padding:6px 14px;">📥 DOWNLOAD JSON DATA</a>
+          </div>
+
+          <h4 style="font-family:var(--font-display); font-size:1.25rem; text-transform:uppercase; margin-top:0.5rem;">Execution Steps (\${execs.length})</h4>
           <div style="display:flex; flex-direction:column; gap:0.5rem;">
             \${execs.map(ex => \`
               <div class="progress-item">
@@ -1484,6 +1491,46 @@ export function createDashboardServer(options: DashboardServerOptions = {}): htt
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ status: 'success', data: runs }));
       return;
+    }
+
+    // GET /api/runs/:id/export/json
+    if (req.method === 'GET' && url.pathname.match(/^\/api\/runs\/([^/]+)\/export\/json$/)) {
+      const match = url.pathname.match(/^\/api\/runs\/([^/]+)\/export\/json$/);
+      const runId = match![1];
+      try {
+        const generator = new ReportGenerator(storage);
+        const json = generator.generateJsonSummary(runId);
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Content-Disposition': `attachment; filename="summary-${runId}.json"`
+        });
+        res.end(JSON.stringify(json, null, 2));
+        return;
+      } catch (err: any) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'error', message: err.message }));
+        return;
+      }
+    }
+
+    // GET /api/runs/:id/export/html
+    if (req.method === 'GET' && url.pathname.match(/^\/api\/runs\/([^/]+)\/export\/html$/)) {
+      const match = url.pathname.match(/^\/api\/runs\/([^/]+)\/export\/html$/);
+      const runId = match![1];
+      try {
+        const generator = new ReportGenerator(storage);
+        const html = generator.generateHtmlReport(runId);
+        res.writeHead(200, {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Content-Disposition': `attachment; filename="report-${runId}.html"`
+        });
+        res.end(html);
+        return;
+      } catch (err: any) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'error', message: err.message }));
+        return;
+      }
     }
 
     // GET /api/runs/:id (Details & Executions)
