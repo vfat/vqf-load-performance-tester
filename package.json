@@ -6,6 +6,7 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:run": "node dist/src/cli.js",
     "build": "tsc",
     "start": "node dist/src/server.js",
     "dashboard": "node dist/src/server.js"
