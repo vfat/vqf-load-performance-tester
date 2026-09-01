@@ -590,6 +590,101 @@ export function generateDashboardHtml(): string {
       color: var(--color-ink);
       cursor: pointer;
     }
+
+    /* Postman-like API Step Cards & Sub-Tabs */
+    .api-step-card {
+      background: var(--color-surface);
+      border: var(--border-subtle);
+      box-shadow: var(--shadow-sm);
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      transition: all 120ms ease;
+    }
+
+    .api-step-card:hover {
+      box-shadow: var(--shadow-md);
+    }
+
+    .api-subtabs-nav {
+      display: flex;
+      gap: 0.35rem;
+      border-bottom: 2px solid var(--color-canvas);
+      margin-top: 0.25rem;
+      overflow-x: auto;
+    }
+
+    .api-subtab-btn {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 6px 14px;
+      border: none;
+      background: transparent;
+      color: var(--color-ink-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: all 100ms ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .api-subtab-btn:hover {
+      color: var(--color-primary);
+      background: var(--color-surface-hover);
+    }
+
+    .api-subtab-btn.active {
+      color: var(--color-primary);
+      border-bottom: 2px solid var(--color-primary);
+      background: var(--color-canvas);
+    }
+
+    .api-tab-pane {
+      background: var(--color-canvas);
+      border: var(--border-subtle);
+      padding: 0.75rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .api-code-textarea {
+      width: 100%;
+      box-sizing: border-box;
+      min-height: 100px;
+      font-family: var(--font-mono);
+      font-size: 0.8125rem;
+      line-height: 1.45;
+      padding: 8px 12px;
+      border: var(--border-subtle);
+      background: var(--color-surface);
+      color: var(--color-ink);
+      resize: vertical;
+      outline: none;
+      border-radius: 2px;
+    }
+
+    .api-code-textarea:focus {
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 1px var(--color-primary);
+    }
+
+    .api-tab-hint {
+      font-family: var(--font-mono);
+      font-size: 0.6875rem;
+      color: var(--color-ink-muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
   </style>
 </head>
 <body>
@@ -1070,7 +1165,10 @@ export function generateDashboardHtml(): string {
       container.innerHTML = '';
 
       apiSteps.forEach((step, idx) => {
+        if (!step._activeTab) step._activeTab = 'headers';
+
         const card = document.createElement('div');
+        card.className = 'api-step-card';
 
         const methodColors = {
           GET: '#10B981',
@@ -1082,27 +1180,26 @@ export function generateDashboardHtml(): string {
 
         const currentMethod = step.method || 'GET';
         const mColor = methodColors[currentMethod] || '#0077C0';
+        card.style.borderLeft = '4px solid ' + mColor;
 
-        card.style.cssText = 'background:var(--color-surface); border:var(--border-subtle); border-left:4px solid ' + mColor + '; padding:0.75rem 1rem; display:flex; flex-direction:column; gap:0.625rem;';
-
-        // Row 1: step badge + name input + assert + remove
+        // Row 1: Step Header (Method Pill + Step Index + Step Name + Assert + Delete)
         const row1 = document.createElement('div');
         row1.style.cssText = 'display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;';
 
         const leftGroup = document.createElement('div');
-        leftGroup.style.cssText = 'display:flex; align-items:center; gap:0.5rem; flex:1; min-width:220px;';
+        leftGroup.style.cssText = 'display:flex; align-items:center; gap:0.5rem; flex:1; min-width:240px;';
 
         const badge = document.createElement('span');
         badge.className = 'badge';
-        badge.style.cssText = 'background:' + mColor + '; color:#fff; font-weight:700; font-size:0.75rem; padding:3px 8px; white-space:nowrap;';
+        badge.style.cssText = 'background:' + mColor + '; color:#fff; font-weight:700; font-size:0.75rem; padding:4px 8px; letter-spacing:0.04em;';
         badge.textContent = '#' + (idx + 1) + ' ' + currentMethod;
 
         const nameInput = document.createElement('input');
         nameInput.type = 'text';
         nameInput.className = 'form-input';
-        nameInput.style.cssText = 'padding:4px 8px; font-weight:700; flex:1;';
+        nameInput.style.cssText = 'padding:6px 10px; font-weight:700; font-size:0.875rem; flex:1; border-radius:2px;';
         nameInput.value = step.name || '';
-        nameInput.placeholder = 'Step Name';
+        nameInput.placeholder = 'Step Name (e.g. Login User)';
         nameInput.oninput = function() { updateApiStep(idx, 'name', this.value); };
 
         leftGroup.appendChild(badge);
@@ -1113,12 +1210,12 @@ export function generateDashboardHtml(): string {
 
         const assertLabel = document.createElement('label');
         assertLabel.style.cssText = 'font-size:0.75rem; font-family:var(--font-mono); font-weight:700; color:var(--color-ink-muted); white-space:nowrap;';
-        assertLabel.textContent = 'Assert:';
+        assertLabel.textContent = 'Assert Status:';
 
         const assertInput = document.createElement('input');
         assertInput.type = 'number';
         assertInput.className = 'form-input';
-        assertInput.style.cssText = 'width:65px; padding:4px 6px; font-family:var(--font-mono); text-align:center;';
+        assertInput.style.cssText = 'width:70px; padding:4px 6px; font-family:var(--font-mono); font-weight:700; text-align:center;';
         assertInput.value = step.assertStatus || 200;
         assertInput.oninput = function() { updateApiStep(idx, 'assertStatus', parseInt(this.value, 10)); };
 
@@ -1129,8 +1226,8 @@ export function generateDashboardHtml(): string {
           const removeBtn = document.createElement('button');
           removeBtn.type = 'button';
           removeBtn.className = 'btn btn-danger';
-          removeBtn.style.cssText = 'padding:2px 8px; font-size:0.75rem; line-height:1.4;';
-          removeBtn.textContent = '✕';
+          removeBtn.style.cssText = 'padding:3px 10px; font-size:0.75rem; font-weight:700;';
+          removeBtn.textContent = '✕ Remove';
           removeBtn.onclick = function() { removeApiStep(idx); };
           rightGroup.appendChild(removeBtn);
         }
@@ -1138,17 +1235,19 @@ export function generateDashboardHtml(): string {
         row1.appendChild(leftGroup);
         row1.appendChild(rightGroup);
 
-        // Row 2: method select + URL input
+        // Row 2: Method Selector + URL Endpoint Input
         const row2 = document.createElement('div');
         row2.style.cssText = 'display:flex; gap:0.5rem; align-items:center;';
 
         const methodSelect = document.createElement('select');
         methodSelect.className = 'form-select';
-        methodSelect.style.cssText = 'width:105px; font-weight:700; font-family:var(--font-mono); font-size:0.8125rem;';
+        methodSelect.style.cssText = 'width:115px; font-weight:800; font-family:var(--font-mono); font-size:0.875rem; background:' + mColor + '; color:#fff; border-color:' + mColor + ';';
         ['GET','POST','PUT','DELETE','PATCH'].forEach(m => {
           const opt = document.createElement('option');
           opt.value = m;
           opt.textContent = m;
+          opt.style.background = '#FFFFFF';
+          opt.style.color = '#1D242B';
           if (m === currentMethod) opt.selected = true;
           methodSelect.appendChild(opt);
         });
@@ -1157,86 +1256,254 @@ export function generateDashboardHtml(): string {
         const urlInput = document.createElement('input');
         urlInput.type = 'text';
         urlInput.className = 'form-input';
-        urlInput.style.cssText = 'flex:1; font-family:var(--font-mono); font-size:0.8125rem;';
+        urlInput.style.cssText = 'flex:1; font-family:var(--font-mono); font-size:0.875rem; padding:8px 12px; font-weight:600;';
         urlInput.value = step.url || '';
-        urlInput.placeholder = 'https://api.example.com/endpoint/{{variable}}';
+        urlInput.placeholder = 'https://api.example.com/v1/resource/{{itemId}}';
         urlInput.oninput = function() { updateApiStep(idx, 'url', this.value); };
 
         row2.appendChild(methodSelect);
         row2.appendChild(urlInput);
 
-        // Row 3: Expandable details (headers, body, extract vars)
-        const details = document.createElement('details');
-        details.style.cssText = 'background:var(--color-canvas); padding:0.5rem 0.75rem; border:var(--border-subtle); margin-top:0.125rem;';
+        // Row 3: Postman Sub-Tabs Navigation
+        const tabsNav = document.createElement('div');
+        tabsNav.className = 'api-subtabs-nav';
 
-        const summary = document.createElement('summary');
-        summary.style.cssText = 'font-family:var(--font-mono); font-size:0.75rem; font-weight:700; cursor:pointer; color:var(--color-primary);';
-        summary.textContent = '⚙️ Headers, Body & Variable Extraction';
-        details.appendChild(summary);
+        const headerKeysCount = Object.keys(step.headers || {}).length;
+        const extractKeysCount = Object.keys(step.extractVars || {}).length;
+        const hasBody = step.body && step.body.trim().length > 0;
 
-        const detailGrid = document.createElement('div');
-        detailGrid.style.cssText = 'display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-top:0.5rem;';
+        const tabsConfig = [
+          { id: 'headers', label: '📋 Headers', count: headerKeysCount > 0 ? headerKeysCount : null },
+          { id: 'body', label: '📦 Body (JSON)', dot: hasBody },
+          { id: 'extract', label: '⚡ Extract Vars', count: extractKeysCount > 0 ? extractKeysCount : null }
+        ];
 
-        // Headers textarea
-        const hdDiv = document.createElement('div');
-        const hdLabel = document.createElement('label');
-        hdLabel.className = 'form-label';
-        hdLabel.style.cssText = 'font-size:0.6875rem; margin-bottom:2px;';
-        hdLabel.textContent = 'Request Headers (JSON)';
-        const hdArea = document.createElement('textarea');
-        hdArea.className = 'form-input';
-        hdArea.rows = 2;
-        hdArea.style.cssText = 'font-size:0.75rem; font-family:var(--font-mono);';
-        hdArea.placeholder = '{"Authorization": "Bearer {{token}}"}';
-        hdArea.value = step.headers ? JSON.stringify(step.headers, null, 2) : '';
-        hdArea.oninput = function() { updateApiStepHeaders(idx, this.value); };
-        hdDiv.appendChild(hdLabel);
-        hdDiv.appendChild(hdArea);
+        tabsConfig.forEach(tab => {
+          const tabBtn = document.createElement('button');
+          tabBtn.type = 'button';
+          tabBtn.className = 'api-subtab-btn' + (step._activeTab === tab.id ? ' active' : '');
+          
+          let tabHtml = tab.label;
+          if (tab.count !== null && tab.count !== undefined) {
+            tabHtml += ' <span class="badge" style="background:var(--color-primary); color:#fff; font-size:0.625rem; padding:1px 5px;">' + tab.count + '</span>';
+          } else if (tab.dot) {
+            tabHtml += ' <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--color-success); margin-left:4px;"></span>';
+          }
+          tabBtn.innerHTML = tabHtml;
 
-        // Body textarea
-        const bdDiv = document.createElement('div');
-        const bdLabel = document.createElement('label');
-        bdLabel.className = 'form-label';
-        bdLabel.style.cssText = 'font-size:0.6875rem; margin-bottom:2px;';
-        bdLabel.textContent = 'Request Body / Payload';
-        const bdArea = document.createElement('textarea');
-        bdArea.className = 'form-input';
-        bdArea.rows = 2;
-        bdArea.style.cssText = 'font-size:0.75rem; font-family:var(--font-mono);';
-        bdArea.placeholder = '{"username": "test", "password": "secret"}';
-        bdArea.value = step.body || '';
-        bdArea.oninput = function() { updateApiStep(idx, 'body', this.value); };
-        bdDiv.appendChild(bdLabel);
-        bdDiv.appendChild(bdArea);
+          tabBtn.onclick = function() {
+            step._activeTab = tab.id;
+            renderApiSteps();
+          };
+          tabsNav.appendChild(tabBtn);
+        });
 
-        // Extract vars textarea (full width)
-        const exDiv = document.createElement('div');
-        exDiv.style.cssText = 'grid-column: 1 / -1;';
-        const exLabel = document.createElement('label');
-        exLabel.className = 'form-label';
-        exLabel.style.cssText = 'font-size:0.6875rem; margin-bottom:2px;';
-        exLabel.textContent = 'Extract Variables (e.g. {"authToken": "data.token"})';
-        const exArea = document.createElement('textarea');
-        exArea.className = 'form-input';
-        exArea.rows = 2;
-        exArea.style.cssText = 'font-size:0.75rem; font-family:var(--font-mono);';
-        exArea.placeholder = '{"authToken": "data.access_token"}';
-        exArea.value = step.extractVars ? JSON.stringify(step.extractVars, null, 2) : '';
-        exArea.oninput = function() { updateApiStepExtract(idx, this.value); };
-        exDiv.appendChild(exLabel);
-        exDiv.appendChild(exArea);
+        // Row 4: Dedicated Active Tab Pane
+        const tabPane = document.createElement('div');
+        tabPane.className = 'api-tab-pane';
 
-        detailGrid.appendChild(hdDiv);
-        detailGrid.appendChild(bdDiv);
-        detailGrid.appendChild(exDiv);
-        details.appendChild(detailGrid);
+        if (step._activeTab === 'headers') {
+          // --- HEADERS TAB ---
+          const hintBar = document.createElement('div');
+          hintBar.className = 'api-tab-hint';
 
-        // Assemble card
+          const hintSpan = document.createElement('span');
+          hintSpan.innerHTML = '💡 Request Headers in JSON format. Use <code>{{variable}}</code> for dynamic interpolation.';
+          hintBar.appendChild(hintSpan);
+
+          const btnGroup = document.createElement('div');
+          btnGroup.style.cssText = 'display:flex; gap:4px;';
+
+          const b1 = document.createElement('button');
+          b1.type = 'button';
+          b1.className = 'btn btn-secondary';
+          b1.style.cssText = 'font-size:0.6875rem; padding:2px 6px;';
+          b1.textContent = '+ Bearer Auth';
+          b1.onclick = function() { insertHeaderTemplate(idx, 'bearer'); };
+
+          const b2 = document.createElement('button');
+          b2.type = 'button';
+          b2.className = 'btn btn-secondary';
+          b2.style.cssText = 'font-size:0.6875rem; padding:2px 6px;';
+          b2.textContent = '+ JSON Content-Type';
+          b2.onclick = function() { insertHeaderTemplate(idx, 'json'); };
+
+          const b3 = document.createElement('button');
+          b3.type = 'button';
+          b3.className = 'btn btn-secondary';
+          b3.style.cssText = 'font-size:0.6875rem; padding:2px 6px;';
+          b3.textContent = '🧹 Format';
+          b3.onclick = function() { formatStepJson(idx, 'headers'); };
+
+          btnGroup.appendChild(b1);
+          btnGroup.appendChild(b2);
+          btnGroup.appendChild(b3);
+          hintBar.appendChild(btnGroup);
+
+          const textarea = document.createElement('textarea');
+          textarea.className = 'api-code-textarea';
+          textarea.rows = 4;
+          textarea.placeholder = '{\\n  "Authorization": "Bearer {{authToken}}",\\n  "Content-Type": "application/json"\\n}';
+          textarea.value = step.headers && Object.keys(step.headers).length > 0 ? JSON.stringify(step.headers, null, 2) : '';
+          textarea.oninput = function() { updateApiStepHeaders(idx, this.value); };
+
+          tabPane.appendChild(hintBar);
+          tabPane.appendChild(textarea);
+
+        } else if (step._activeTab === 'body') {
+          // --- BODY (JSON) TAB ---
+          const hintBar = document.createElement('div');
+          hintBar.className = 'api-tab-hint';
+
+          const hintSpan = document.createElement('span');
+          hintSpan.innerHTML = '💡 Request Payload Body (JSON). Variables like <code>{{userId}}</code> are resolved at runtime.';
+          hintBar.appendChild(hintSpan);
+
+          const btnGroup = document.createElement('div');
+          btnGroup.style.cssText = 'display:flex; gap:4px;';
+
+          const b1 = document.createElement('button');
+          b1.type = 'button';
+          b1.className = 'btn btn-secondary';
+          b1.style.cssText = 'font-size:0.6875rem; padding:2px 6px;';
+          b1.textContent = '+ Login Sample';
+          b1.onclick = function() { insertBodyTemplate(idx, 'login'); };
+
+          const b2 = document.createElement('button');
+          b2.type = 'button';
+          b2.className = 'btn btn-secondary';
+          b2.style.cssText = 'font-size:0.6875rem; padding:2px 6px;';
+          b2.textContent = '+ Item Sample';
+          b2.onclick = function() { insertBodyTemplate(idx, 'item'); };
+
+          const b3 = document.createElement('button');
+          b3.type = 'button';
+          b3.className = 'btn btn-secondary';
+          b3.style.cssText = 'font-size:0.6875rem; padding:2px 6px;';
+          b3.textContent = '🧹 Format';
+          b3.onclick = function() { formatStepJson(idx, 'body'); };
+
+          btnGroup.appendChild(b1);
+          btnGroup.appendChild(b2);
+          btnGroup.appendChild(b3);
+          hintBar.appendChild(btnGroup);
+
+          const textarea = document.createElement('textarea');
+          textarea.className = 'api-code-textarea';
+          textarea.rows = 5;
+          textarea.placeholder = '{\\n  "username": "user123",\\n  "password": "secret_password"\\n}';
+          textarea.value = step.body || '';
+          textarea.oninput = function() { updateApiStep(idx, 'body', this.value); };
+
+          tabPane.appendChild(hintBar);
+          tabPane.appendChild(textarea);
+
+        } else if (step._activeTab === 'extract') {
+          // --- EXTRACT VARIABLES TAB ---
+          const hintBar = document.createElement('div');
+          hintBar.className = 'api-tab-hint';
+
+          const hintSpan = document.createElement('span');
+          hintSpan.innerHTML = '💡 Map JSON response fields into <code>{{variables}}</code> for downstream steps in the chain.';
+          hintBar.appendChild(hintSpan);
+
+          const btnGroup = document.createElement('div');
+          btnGroup.style.cssText = 'display:flex; gap:4px;';
+
+          const b1 = document.createElement('button');
+          b1.type = 'button';
+          b1.className = 'btn btn-secondary';
+          b1.style.cssText = 'font-size:0.6875rem; padding:2px 6px;';
+          b1.textContent = '+ Token Extract';
+          b1.onclick = function() { insertExtractTemplate(idx, 'token'); };
+
+          const b2 = document.createElement('button');
+          b2.type = 'button';
+          b2.className = 'btn btn-secondary';
+          b2.style.cssText = 'font-size:0.6875rem; padding:2px 6px;';
+          b2.textContent = '+ ID Extract';
+          b2.onclick = function() { insertExtractTemplate(idx, 'id'); };
+
+          const b3 = document.createElement('button');
+          b3.type = 'button';
+          b3.className = 'btn btn-secondary';
+          b3.style.cssText = 'font-size:0.6875rem; padding:2px 6px;';
+          b3.textContent = '🧹 Format';
+          b3.onclick = function() { formatStepJson(idx, 'extract'); };
+
+          btnGroup.appendChild(b1);
+          btnGroup.appendChild(b2);
+          btnGroup.appendChild(b3);
+          hintBar.appendChild(btnGroup);
+
+          const textarea = document.createElement('textarea');
+          textarea.className = 'api-code-textarea';
+          textarea.rows = 4;
+          textarea.placeholder = '{\\n  "authToken": "data.access_token",\\n  "createdId": "data.id"\\n}';
+          textarea.value = step.extractVars && Object.keys(step.extractVars).length > 0 ? JSON.stringify(step.extractVars, null, 2) : '';
+          textarea.oninput = function() { updateApiStepExtract(idx, this.value); };
+
+          tabPane.appendChild(hintBar);
+          tabPane.appendChild(textarea);
+        }
+
+        // Assemble clean card
         card.appendChild(row1);
         card.appendChild(row2);
-        card.appendChild(details);
+        card.appendChild(tabsNav);
+        card.appendChild(tabPane);
         container.appendChild(card);
       });
+    }
+
+    function insertHeaderTemplate(idx, type) {
+      if (!apiSteps[idx]) return;
+      apiSteps[idx].headers = apiSteps[idx].headers || {};
+      if (type === 'bearer') {
+        apiSteps[idx].headers['Authorization'] = 'Bearer {{authToken}}';
+      } else if (type === 'json') {
+        apiSteps[idx].headers['Content-Type'] = 'application/json';
+        apiSteps[idx].headers['Accept'] = 'application/json';
+      }
+      renderApiSteps();
+    }
+
+    function insertBodyTemplate(idx, type) {
+      if (!apiSteps[idx]) return;
+      if (type === 'login') {
+        apiSteps[idx].body = JSON.stringify({ username: "admin_user", password: "secure_password_123" }, null, 2);
+      } else if (type === 'item') {
+        apiSteps[idx].body = JSON.stringify({ name: "Gadget Pro", price: 99.5, inStock: true }, null, 2);
+      }
+      renderApiSteps();
+    }
+
+    function insertExtractTemplate(idx, type) {
+      if (!apiSteps[idx]) return;
+      apiSteps[idx].extractVars = apiSteps[idx].extractVars || {};
+      if (type === 'token') {
+        apiSteps[idx].extractVars['authToken'] = 'data.access_token';
+      } else if (type === 'id') {
+        apiSteps[idx].extractVars['resourceId'] = 'data.id';
+      }
+      renderApiSteps();
+    }
+
+    function formatStepJson(idx, type) {
+      if (!apiSteps[idx]) return;
+      try {
+        if (type === 'headers') {
+          renderApiSteps();
+        } else if (type === 'body' && apiSteps[idx].body) {
+          const parsed = JSON.parse(apiSteps[idx].body);
+          apiSteps[idx].body = JSON.stringify(parsed, null, 2);
+          renderApiSteps();
+        } else if (type === 'extract') {
+          renderApiSteps();
+        }
+      } catch (err) {
+        alert('Invalid JSON: ' + err.message);
+      }
     }
 
     function addApiStep() {
