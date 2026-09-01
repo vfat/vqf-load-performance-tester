@@ -1,6 +1,6 @@
 # SCD-03-Load-Generator-Artillery
 
-> **Status:** Active / Enhanced  
+> **Status:** Active / Enhanced (Deck 2 Dedicated Worker)  
 > **Target Component:** HTTP Load Generator & Quantiles Engine (`src/lib/server/http-load-worker.ts`, `src/lib/server/artillery-runner.ts`)  
 > **Workspace:** `.ai-doc/plan/component/`  
 
@@ -8,45 +8,35 @@
 
 ## 1. Context
 
-HTTP Load Generator & Quantiles Engine adalah komponen traffic generator asinkron yang bertugas mengirimkan request HTTP nyata secara paralel dengan jumlah Virtual Users (1–100 VUs), memvariasikan beban sesuai Load Profile (`fixed`, `ramp-up`, `spike`), menghitung statistik persentil latensi secara presisi (p50, p90, p95, p99), serta mengeksekusi request HTTP berantai (*API chaining*) pada skenario kustom.
+HTTP Load Generator & Quantiles Engine bertugas secara khusus untuk **Deck 2: REST API Load Deck**. Menjalankan pengujian beban volume tinggi asinkron dengan Virtual Users (1–100 VUs), profil beban (`fixed`, `ramp-up`, `spike`), kalkulasi kuantil latensi (p50..p99), serta eksekusi request REST API berantai (*API Chaining* dengan ekstraksi token/variabel `{{var}}`).
 
 Posisi dalam sistem:
-* Menerima konfigurasi beban dari Test Orchestrator (`engine.ts`).
-* Menjalankan loop eksekusi `fetch()` asinkron per detik ke target endpoint.
-* Menghitung kuantil latensi menggunakan formula *nearest rank*.
-* Menyiarkan metrik per-detik (*ticks*) ke SSE streamer dan menyusun ringkasan akhir (*final summary*).
+* Menerima konfigurasi beban dan API Chaining dari Test Orchestrator (`engine.ts`).
+* Mengirimkan request HTTP asinkron nyata secara paralel tanpa overhead rendering DOM browser.
+* Menghitung metrik kuantil latensi (nearest rank), RPS, dan error rate per detik (*ticks*).
+* Menyusun ringkasan akhir (*final summary*) 12 metrik performa.
 
 ---
 
 ## 2. Scope
 
 ### In-Scope:
-* Pengiriman request HTTP asinkron nyata dengan dukungan timeout per-koneksi (default 10 detik).
-* Pengaturan alokasi Virtual Users (1–100 VUs) dan durasi tes (5–300 detik).
-* Implementasi algoritma Load Profile:
-  * `fixed`: Beban konstan dari awal hingga akhir.
-  * `ramp-up`: Peningkatan VU linier dari 1 ke target VU untuk menemukan batas saturasi server.
-  * `spike`: Lonjakan traffic drastis di pertengahan durasi pengujian.
+* Pengiriman request HTTP asinkron nyata dengan timeout guard per-koneksi.
+* Skalabilitas Virtual Users (1–100 VUs) dan durasi (5–300 detik).
+* Algoritma profil beban: `fixed` (konstan), `ramp-up` (linier naik), `spike` (lonjakan traffic).
 * Perhitungan statistik latensi: `Min`, `Max`, `Avg`, `p50 (Median)`, `p90`, `p95`, `p99`.
-* Perhitungan metrik throughput (`RPS`) dan tingkat kegagalan (`Error Rate %`).
-* Eksekusi step HTTP berantai dengan ekstraksi variabel JSON (`extractVars`) dan validasi status code (`assertStatus`).
+* Alur REST API Chaining:
+  * Step 1: POST Login ➔ Ekstrak variabel JSON (`extractVars: { "authToken": "body.token" }`).
+  * Step 2: GET Profile ➔ Injeksi header `Authorization: Bearer {{authToken}}`.
+  * Step 3: Assert HTTP Status Code & JSON response path.
 * Responsif terhadap sinyal abort darurat via `AbortSignal`.
 
 ### Out-of-Scope:
-* Rendering HTML/CSS/DOM atau eksekusi JavaScript client-side (didelegasikan ke Playwright Worker).
-* Penyimpanan permanen database (didelegasikan ke SQLite Storage).
+* Rendering HTML/CSS/DOM atau eksekusi JavaScript browser (sepenuhnya ditangani di Deck 1 oleh Playwright Worker).
 
 ---
 
-## 3. Prerequisite
-
-* Node.js runtime (v20+) dengan native `fetch()` dan `AbortController`.
-* Konektivitas jaringan ke endpoint target.
-* Formula kuantil teruji di `artillery-runner.ts`.
-
----
-
-## 4. Daftar Usecase
+## 3. Daftar Usecase
 
 | Kode Usecase | Nama Usecase | Deskripsi Singkat |
 |---|---|---|
@@ -55,21 +45,5 @@ Posisi dalam sistem:
 | `UC-ART-03` | Scale VUs by Load Profile | Menghitung jumlah VU aktif setiap detik berdasarkan profil `fixed`, `ramp-up`, atau `spike`. |
 | `UC-ART-04` | Calculate Precision Quantiles | Menghitung persentil latensi p50, p90, p95, dan p99 menggunakan metode nearest rank. |
 | `UC-ART-05` | Emit Realtime Tick Metrics | Menghitung RPS, latensi interval, dan error count per detik untuk disiarkan ke SSE Streamer. |
-| `UC-ART-06` | Execute HTTP Step with Variable Extraction | Menembakkan request HTTP pada skenario kustom, mengekstrak nilai JSON ke context, dan memvalidasi HTTP status code. |
-| `UC-ART-07` | Emit Final Performance Summary | Mengagregasi seluruh respons dan menyusun laporan ringkasan performa lengkap (12 metrik). |
-
----
-
-## 5. Catatan Diskusi
-
-* Seluruh body response di-consume secara cepat dan dilepas dari memory untuk menjaga konsumsi RAM tetap di bawah 30MB selama pengetesan ratusan request per detik.
-* Latensi dihitung dari awal pengiriman byte pertama hingga response stream selesai diterima.
-
----
-
-## 6. Asumsi, Risiko, dan Hal yang Perlu Dikonfirmasi
-
-| Item | Tipe | Catatan |
-|---|---|---|
-| Target Rate Limiting | Risiko | Target server mungkin mengembalikan status 429 jika terkena rate limiter; engine mencatatnya sebagai error rate dan tidak menghentikan keseluruhan tes kecuali di-abort. |
-| VPS Socket Exhaustion | Mitigasi | Hard limit VUs dibatasi maksimal 100 koneksi konkuren untuk menjaga kestabilan socket TCP di VPS. |
+| `UC-ART-06` | Execute REST API Chaining Step | Menembakkan request HTTP berantai, mengekstrak variabel token ke context, dan memvalidasi HTTP status code. |
+| `UC-ART-07` | Emit Final Performance Summary | Mengagregasi seluruh respons dan menyusun laporan ringkasan performa 12 metrik. |

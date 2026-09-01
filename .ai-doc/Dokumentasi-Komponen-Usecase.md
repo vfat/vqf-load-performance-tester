@@ -1,8 +1,10 @@
-# Dokumentasi Komponen dan Use Case: Lean Testing & Single Dashboard
+# Dokumentasi Komponen dan Use Case: Lean Testing & Two-Deck Dashboard
 
 ## 1. Ringkasan
 
-Dokumen ini memetakan seluruh komponen dan use case untuk **Lean Load Testing & Single Dashboard Platform**. Sistem ini memadukan **Single Web Dashboard Control** (Risograph Broadsheet UI) dengan engine pengujian Playwright E2E, Real HTTP Load Generator, Custom Scenarios Pipeline, dan database lokal SQLite.
+Dokumen ini memetakan seluruh komponen dan use case untuk **Lean Load Testing & Dual-Deck Dashboard Platform**. Sistem memisahkan secara tegas dua ranah pengujian ke dalam antarmuka khusus:
+1. **🎭 Playwright E2E Studio Deck:** Pengujian fungsional interaksi browser DOM nyata, form-filling, assertion teks visual, dan *Live Process Viewport Frame*.
+2. **⚡ REST API Load Deck (Artillery Engine):** Otomatisasi alur REST API berantai (*API Chaining*), penembakan beban masif dengan Virtual Users (1–100), dan visualisasi metrik performa (RPS, Latensi p50..p99, Error Rate).
 
 ---
 
@@ -17,62 +19,66 @@ actor "QA / Developer" as WebUser
 actor "CI/CD Pipeline" as CIUser
 actor "System Under Test (SUT)" as SUT
 
-package "Dashboard Web UI (Risograph)" {
-  usecase "Configure & Trigger Run" as UC_UI_01
-  usecase "Emergency Abort Run" as UC_UI_02
-  usecase "View Live Telemetry via SSE" as UC_UI_03
-  usecase "Inspect Run History & Artifacts" as UC_UI_04
-  usecase "Build Custom Scenarios & Presets" as UC_UI_05
+package "Deck 1: Playwright E2E Studio" {
+  usecase "Build Browser DOM Steps" as UC_E2E_01
+  usecase "Trigger E2E Headless Run" as UC_E2E_02
+  usecase "View Live Viewport Frame" as UC_E2E_03
+  usecase "Inspect Step Screenshots" as UC_E2E_04
 }
 
-package "Task Scheduler & Orchestrator" {
+package "Deck 2: REST API Load Deck" {
+  usecase "Configure API Chaining Steps" as UC_API_01
+  usecase "Set Virtual Users & Profile" as UC_API_02
+  usecase "Trigger HTTP Load Run" as UC_API_03
+  usecase "Stream Live Telemetry (ApexCharts)" as UC_API_04
+  usecase "View Final Summary Metrics" as UC_API_05
+}
+
+package "Task Scheduler & Control Plane" {
   usecase "Throttle Safe Concurrency" as UC_SCHED_01
-  usecase "Dispatch In-Memory Tasks" as UC_SCHED_02
-  usecase "Execute Custom Step Pipeline" as UC_ORCH_05
+  usecase "Dispatch E2E Task" as UC_SCHED_02
+  usecase "Dispatch API Load Task" as UC_SCHED_03
+  usecase "Emergency Abort Signal" as UC_SCHED_04
 }
 
-package "Test Workers" {
-  usecase "Execute Playwright E2E" as UC_WORK_01
-  usecase "Execute Real HTTP Load Test" as UC_WORK_02
-  usecase "Emit Realtime Progress Events" as UC_WORK_03
-  usecase "Execute Multi-Step Browser Actions" as UC_WORK_04
-  usecase "Execute HTTP API Step Chaining" as UC_WORK_05
+package "Workers & Persistence" {
+  usecase "Playwright Browser Worker" as UC_WORK_PW
+  usecase "HTTP Load Worker" as UC_WORK_HTTP
+  usecase "Persist Records to SQLite" as UC_DATA_01
+  usecase "Stream Realtime SSE Events" as UC_DATA_02
 }
 
-package "Persistence & Reporting" {
-  usecase "Write Run Records to SQLite" as UC_DATA_01
-  usecase "Stream SSE Metrics" as UC_DATA_02
-  usecase "Generate Static HTML/JSON Report" as UC_DATA_03
-}
+' Interactions Deck 1
+WebUser --> UC_E2E_01
+WebUser --> UC_E2E_02
+WebUser --> UC_E2E_03
+WebUser --> UC_E2E_04
 
-' Interactions
-WebUser --> UC_UI_01
-WebUser --> UC_UI_02
-WebUser --> UC_UI_03
-WebUser --> UC_UI_04
-WebUser --> UC_UI_05
+' Interactions Deck 2
+WebUser --> UC_API_01
+WebUser --> UC_API_02
+WebUser --> UC_API_03
+WebUser --> UC_API_04
+WebUser --> UC_API_05
 
 CIUser --> UC_SCHED_01
 
-UC_UI_01 ..> UC_SCHED_02 : <<trigger>>
-UC_UI_02 ..> UC_SCHED_01 : <<abort>>
-UC_UI_05 ..> UC_ORCH_05 : <<dispatch>>
+' Trigger to Schedulers
+UC_E2E_02 ..> UC_SCHED_02 : <<trigger>>
+UC_API_03 ..> UC_SCHED_03 : <<trigger>>
 
-UC_SCHED_02 ..> UC_WORK_01 : <<dispatch>>
-UC_SCHED_02 ..> UC_WORK_02 : <<dispatch>>
-UC_ORCH_05 ..> UC_WORK_04 : <<invoke>>
-UC_ORCH_05 ..> UC_WORK_05 : <<invoke>>
+UC_SCHED_02 ..> UC_WORK_PW : <<execute>>
+UC_SCHED_03 ..> UC_WORK_HTTP : <<execute>>
 
-UC_WORK_01 --> SUT : Browser interaction
-UC_WORK_02 --> SUT : Real HTTP traffic
-UC_WORK_04 --> SUT : DOM step interaction
-UC_WORK_05 --> SUT : Chained HTTP request
+UC_WORK_PW --> SUT : DOM Actions (Click/Fill/Wait)
+UC_WORK_HTTP --> SUT : Concurrent HTTP Traffic
 
-UC_WORK_03 ..> UC_DATA_02 : <<stream>>
-UC_WORK_03 ..> UC_DATA_01 : <<persist>>
-UC_DATA_02 ..> UC_UI_03 : <<push to browser>>
-UC_DATA_01 ..> UC_UI_04 : <<query>>
-UC_DATA_01 ..> UC_DATA_03 : <<export>>
+UC_WORK_PW ..> UC_DATA_01 : <<save screenshot & step log>>
+UC_WORK_HTTP ..> UC_DATA_02 : <<broadcast per-tick SSE>>
+UC_WORK_HTTP ..> UC_DATA_01 : <<save summary metrics>>
+
+UC_DATA_02 ..> UC_API_04 : <<push to ApexCharts>>
+UC_DATA_01 ..> UC_E2E_04 : <<render screenshot gallery>>
 
 @enduml
 ```
@@ -81,62 +87,59 @@ UC_DATA_01 ..> UC_DATA_03 : <<export>>
 
 ## 3. Daftar Use Case per Komponen
 
-### 3.1 Dashboard Web UI (Risograph Broadsheet)
-**Status**: ✅ **Ada (Active)**  
+### 3.1 Deck 1: Playwright E2E Studio (Halaman Browser Automation)
+**Status**: ✅ **Active / Planned Enhancements**  
 **Design Reference**: [.ai-doc/DESIGN.md](file:///home/ubuntu/workspace/minilab/pentest/.ai-doc/DESIGN.md)
 
 Deskripsi:
-Antarmuka web interaktif single-page yang menyajikan panel kontrol trigger, konfigurasi VUs/Duration/Load Profile, tombol emergency abort, visualisasi ApexCharts 3-series realtime via SSE, tabel riwayat run dengan inspector modal, serta visual builder untuk custom scenarios.
+Halaman terdedikasi untuk perancangan dan eksekusi pengujian visual browser Playwright. Dilengkapi antarmuka step builder (`GOTO`, `CLICK`, `FILL`, `WAIT`, `ASSERT_TEXT`, `SCREENSHOT`), *Interactive Live Viewport Frame*, dan *Screenshot Evidence Gallery*.
 
-Use case yang terverifikasi:
-- ✅ `Configure & Trigger Run` (`UC-UI-01`, **Active**)
-- ✅ `Emergency Abort Run` (`UC-UI-02`, **Active**)
-- ✅ `View Live Telemetry via SSE` (`UC-UI-03`, **Active**)
-- ✅ `Inspect Run History & Artifacts` (`UC-UI-04`, **Active**)
-- ⏳ `Build Custom Scenarios & Presets` (`UC-UI-05`, **Planned**)
+Use case terverifikasi:
+- ⏳ `Build Browser DOM Steps` (`UC-E2E-01`, **Planned**)
+- ✅ `Trigger E2E Headless Run` (`UC-E2E-02`, **Active**)
+- ⏳ `View Live Viewport Frame` (`UC-E2E-03`, **Planned**)
+- ✅ `Inspect Step Screenshots` (`UC-E2E-04`, **Active**)
 
 ---
 
-### 3.2 Task Scheduler & Test Orchestrator
-**Status**: ✅ **Ada (Active)**  
+### 3.2 Deck 2: REST API Load Deck (Halaman Performance & API Chaining)
+**Status**: ✅ **Active / Implemented**  
+**Spec Reference**: [.ai-doc/plan/component/SCD-03-Load-Generator-Artillery.md](file:///home/ubuntu/workspace/minilab/pentest/.ai-doc/plan/component/SCD-03-Load-Generator-Artillery.md)
+
+Deskripsi:
+Halaman terdedikasi untuk otomatisasi REST API berantai (*API Chaining*) dan pengujian beban traffic tinggi. Dilengkapi builder konfigurasi endpoint (Method, Headers, Body, Token Extraction `{{var}}`), slider Virtual Users (1–100), grafik ApexCharts multi-series live stream, dan panel ringkasan 12 metrik quantile (p50..p99).
+
+Use case terverifikasi:
+- ⏳ `Configure API Chaining Steps` (`UC-API-01`, **Planned**)
+- ✅ `Set Virtual Users & Profile` (`UC-API-02`, **Active**)
+- ✅ `Trigger HTTP Load Run` (`UC-API-03`, **Active**)
+- ✅ `Stream Live Telemetry (ApexCharts)` (`UC-API-04`, **Active**)
+- ✅ `View Final Summary Metrics` (`UC-API-05`, **Active**)
+
+---
+
+### 3.3 Task Scheduler & Control Plane
+**Status**: ✅ **Active / Implemented**  
 **Spec Reference**: [.ai-doc/plan/component/SCD-01-Test-Orchestrator.md](file:///home/ubuntu/workspace/minilab/pentest/.ai-doc/plan/component/SCD-01-Test-Orchestrator.md)
 
 Deskripsi:
-Modul orkestrasi internal yang mengatur antrean eksekusi task in-memory, menerapkan batas aman concurrency (2–4 worker) agar VPS aman dari OOM, menangani sinyal abort instan, dan mengorkestrasi pipeline eksekusi multi-step skenario kustom.
+Pengatur alur antrean tugas in-memory dengan throttle concurrency (2–4 worker) dan sinyal emergency abort instan untuk kedua deck.
 
-Use case yang terverifikasi:
+Use case terverifikasi:
 - ✅ `Throttle Safe Concurrency` (`UC-SCHED-01`, **Active**)
-- ✅ `Dispatch In-Memory Tasks` (`UC-SCHED-02`, **Active**)
-- ⏳ `Execute Custom Step Pipeline` (`UC-ORCH-05`, **Planned**)
+- ✅ `Dispatch E2E Task` (`UC-SCHED-02`, **Active**)
+- ✅ `Dispatch API Load Task` (`UC-SCHED-03`, **Active**)
+- ✅ `Emergency Abort Signal` (`UC-SCHED-04`, **Active**)
 
 ---
 
-### 3.3 Test Workers (Playwright + HTTP Load Generator)
-**Status**: ✅ **Ada (Active)**  
-**Spec References**: 
-- [.ai-doc/plan/component/SCD-02-Playwright-Worker-Pool.md](file:///home/ubuntu/workspace/minilab/pentest/.ai-doc/plan/component/SCD-02-Playwright-Worker-Pool.md)
-- [.ai-doc/plan/component/SCD-03-Load-Generator-Artillery.md](file:///home/ubuntu/workspace/minilab/pentest/.ai-doc/plan/component/SCD-03-Load-Generator-Artillery.md)
-
-Deskripsi:
-Worker eksekutor yang menjalankan skenario headless browser (Playwright Chromium) dengan isolasi context dan pembangkit beban traffic HTTP nyata (`HttpLoadWorker`) dengan Virtual Users (1–100), durasi, dan load profiles (`fixed`, `ramp-up`, `spike`).
-
-Use case yang terverifikasi:
-- ✅ `Execute Playwright E2E` (`UC-WORK-01`, **Active**)
-- ✅ `Execute Real HTTP Load Test` (`UC-WORK-02`, **Active**)
-- ✅ `Emit Realtime Progress Events` (`UC-WORK-03`, **Active**)
-- ⏳ `Execute Multi-Step Browser Actions` (`UC-WORK-04`, **Planned**)
-- ⏳ `Execute HTTP API Step Chaining` (`UC-WORK-05`, **Planned**)
-
----
-
-### 3.4 Persistence & Reporting (SQLite + SSE)
-**Status**: ✅ **Ada (Active)**  
+### 3.4 Persistence & Telemetry Streaming
+**Status**: ✅ **Active / Implemented**  
 **Database Reference**: [.ai-doc/desain-database-document/ERD-overview.md](file:///home/ubuntu/workspace/minilab/pentest/.ai-doc/desain-database-document/ERD-overview.md)
 
 Deskripsi:
-Layanan backend yang mengalirkan metrik realtime via SSE endpoint (`/api/metrics/stream`), menyimpan riwayat run dan detail eksekusi ke SQLite WAL mode (`history.db`), dan men-generate file laporan ringkasan.
+Layanan backend yang mengalirkan metrik realtime via SSE endpoint (`/api/metrics/stream`), menyimpan riwayat ke SQLite WAL mode (`history.db`), dan melayani binary screenshot image.
 
-Use case yang terverifikasi:
+Use case terverifikasi:
 - ✅ `Write Run Records to SQLite` (`UC-DATA-01`, **Active**)
 - ✅ `Stream SSE Metrics` (`UC-DATA-02`, **Active**)
-- ✅ `Generate Static HTML/JSON Report` (`UC-DATA-03`, **Active**)

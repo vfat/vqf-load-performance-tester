@@ -1,6 +1,6 @@
 # SCD-01-Test-Orchestrator
 
-> **Status:** Active / Enhanced  
+> **Status:** Active / Enhanced (Two-Deck Model)  
 > **Target Component:** Test Orchestrator & Execution Engine (`src/lib/server/engine.ts`, `src/lib/server/scheduler.ts`)  
 > **Workspace:** `.ai-doc/plan/component/`  
 
@@ -8,66 +8,49 @@
 
 ## 1. Context
 
-Test Orchestrator adalah komponen sentral (*Control Plane*) yang bertugas menerima perintah pengujian (trigger via Dashboard UI, REST API `/api/runs`, atau CI/CD), memvalidasi konfigurasi pengujian (Single URL Hit, Real HTTP Load Profile, atau Custom Scenario Multi-Step), mengatur antrean eksekusi in-memory dengan concurrency throttle (`TaskScheduler`), dan mengorkestrasi eksekusi worker (Playwright E2E & HTTP Load Worker).
+Test Orchestrator adalah komponen sentral (*Control Plane*) yang memproses dispatching untuk dua jalur pengujian yang terpisah secara tegas:
+1. **Jalur 1 (Playwright E2E Deck):** Mengorkestrasi eksekusi skenario browser headless DOM (Single URL Hit atau Multi-Step Form/Click Action Steps) dengan pelaporan screenshot visual.
+2. **Jalur 2 (REST API Load Deck):** Mengorkestrasi pengujian beban HTTP asinkron dan otomatisasi REST API berantai (*API Chaining*) dengan Virtual Users (1–100 VUs) dan load profiles.
 
 Posisi dalam sistem:
-* Menerima request dari aktor luar (QA Engineer, Developer, Dashboard UI, CI/CD Pipeline).
-* Mengatur concurrency dan abort signal via in-memory `TaskScheduler`.
-* Mengorkestrasi eksekusi Playwright Worker dan HTTP Load Worker.
-* Berkoordinasi dengan *SQLite Repository* (`storage.ts`) untuk persistensi dan *Telemetry Streamer* (`streamer.ts`) untuk SSE live streaming.
+* Menerima request dari Dashboard Web UI (Tab E2E Studio atau Tab API Load Deck) atau CI/CD Pipeline.
+* Mengatur antrean in-memory dengan concurrency throttle (`TaskScheduler`).
+* Mendelegasikan eksekusi secara terpisah ke `PlaywrightRunner` (untuk E2E) atau `HttpLoadWorker` (untuk API Load).
+* Mencatat hasil ke SQLite `test_runs` / `test_executions` dan menyiarkan event status via SSE `TelemetryStreamer`.
 
 ---
 
 ## 2. Scope
 
 ### In-Scope:
-* Penerimaan dan validasi payload konfigurasi test run (test type: `HYBRID`, `PLAYWRIGHT_ONLY`, `ARTILLERY_ONLY`, target URL, VUs, duration, load profile, custom scenario steps).
+* Penerimaan konfigurasi pengujian dari Deck 1 (`PLAYWRIGHT_ONLY` / E2E Steps) dan Deck 2 (`ARTILLERY_ONLY` / API Chaining).
 * Pembuatan ID unik untuk setiap sesi test run (`test_run_id`).
-* Orkestrasi eksekusi skenario tunggal maupun skenario kustom multi-step berurutan (*sequential step pipeline*).
-* Pemeliharaan *Shared Execution Context* untuk interpolasi variabel antar-langkah (`{{varName}}`).
-* Manajemen status siklus test run (`QUEUED`, `RUNNING`, `COMPLETED`, `FAILED`, `ABORTED`).
-* Penerimaan sinyal pembatalan darurat (*emergency abort*) dan propagasi `AbortController` ke seluruh worker aktif.
+* Pengelolaan siklus hidup test run (`QUEUED`, `RUNNING`, `COMPLETED`, `FAILED`, `ABORTED`).
+* Propagasi sinyal emergency abort instan via `AbortController`.
+* Isolasi pipeline: Menolak penggabungan (*hybrid execution*) aksi browser dengan loop beban volume tinggi demi keamanan resource VPS.
 
 ### Out-of-Scope:
 * Eksekusi langsung browser Chromium DOM (didelegasikan ke Playwright Worker).
-* Pembangkitan traffic HTTP paralel volume tinggi secara langsung (didelegasikan ke HTTP Load Worker).
-* Visualisasi grafik frontend (didelegasikan ke Dashboard Web UI).
+* Pembangkitan traffic HTTP masif (didelegasikan ke HTTP Load Worker).
 
 ---
 
-## 3. Prerequisite
-
-* Node.js runtime (v20+) & TypeScript engine.
-* Modul in-memory `TaskScheduler` untuk concurrency throttling.
-* Koneksi ke SQLite database (`history.db`) untuk pencatatan metadata sesi pengujian.
-* Telemetry Streamer (`streamer.ts`) aktif untuk penyiaran event realtime.
-
----
-
-## 4. Daftar Usecase
+## 3. Daftar Usecase
 
 | Kode Usecase | Nama Usecase | Deskripsi Singkat |
 |---|---|---|
-| `UC-ORCH-01` | Submit Test Run | Menerima konfigurasi test run, memvalidasi parameter, membuat `test_run_id`, dan memasukkan job ke antrean scheduler. |
-| `UC-ORCH-02` | Monitor Run Status & Stream Telemetry | Mengumpulkan metrik progres dari worker pool dan menyiarkan data SSE per-detik ke dashboard. |
-| `UC-ORCH-03` | Emergency Abort Run | Menerima sinyal abort dan segera menghentikan antrean task serta proses worker yang sedang berjalan via `AbortController`. |
-| `UC-ORCH-04` | Schedule Periodic Run | Memicu test run secara otomatis berdasarkan jadwal cron atau event trigger CI/CD. |
-| `UC-ORCH-05` | Execute Custom Multi-Step Scenario | Mengorkestrasi eksekusi rangkaian langkah (*steps pipeline*), melakukan interpolasi variabel context `{{var}}`, dan memvalidasi assertion per-step. |
-| `UC-ORCH-06` | Dispatch Real HTTP Load Profile | Mengirimkan parameter Virtual Users (1–100), durasi (5–300s), dan load profile (`fixed`, `ramp-up`, `spike`) ke HTTP Load Worker. |
+| `UC-ORCH-01` | Submit E2E Browser Run | Menerima konfigurasi Playwright E2E, membuat `test_run_id`, dan memasukkan job browser ke scheduler. |
+| `UC-ORCH-02` | Submit REST API Load Run | Menerima konfigurasi beban/chaining API (VUs, Duration, Profile), membuat `test_run_id`, dan memicu HttpLoadWorker. |
+| `UC-ORCH-03` | Monitor Status & Stream Telemetry | Mengumpulkan metrik progres dari worker aktif dan menyiarkan data SSE per-detik ke dashboard. |
+| `UC-ORCH-04` | Emergency Abort Run | Menerima sinyal abort dan segera menghentikan antrean task serta proses worker yang sedang berjalan via `AbortController`. |
+| `UC-ORCH-05` | Execute E2E Browser Step Pipeline | Mengorkestrasi eksekusi aksi DOM langkah-demi-langkah pada Playwright Worker. |
+| `UC-ORCH-06` | Execute REST API Chaining Pipeline | Mengorkestrasi eksekusi request HTTP berantai dengan ekstraksi variabel `{{token}}`. |
 
 ---
 
-## 5. Catatan Diskusi
-
-* Menggunakan in-memory TaskScheduler berbasis promise queue untuk zero-external container overhead di VPS.
-* State interpolasi menggunakan regex safe parser tanpa fungsi `eval()` untuk keamanan eksekusi.
-
----
-
-## 6. Asumsi, Risiko, dan Hal yang Perlu Dikonfirmasi
+## 4. Asumsi & Keamanan VPS
 
 | Item | Tipe | Catatan |
 |---|---|---|
-| Concurrency Limit | Asumsi | Batas aman concurrency default adalah 2–4 worker untuk mencegah kehabisan memory di VPS 1GB/2GB. |
-| Step Failure Policy | Asumsi | Default perilaku jika salah satu step gagal adalah menghentikan skenario (*fail-fast*) dan mengambil screenshot bukti kegagalan. |
-| Maximum Steps | Keputusan | Skenario kustom dibatasi maksimal 20 langkah per run demi stabilitas resource. |
+| Non-Hybrid Rule | Kebijakan Arsitektur | Pengujian browser Playwright dan load testing API dipisahkan total untuk mencegah CPU/RAM exhaustion di VPS. |
+| Max Concurrency | Guardrail | Concurrency Playwright dibatasi 2–4 worker; concurrency API load dibatasi 100 Virtual Users. |
