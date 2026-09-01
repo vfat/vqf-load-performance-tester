@@ -735,42 +735,25 @@ export function generateDashboardHtml(): string {
     <!-- ========================================================== -->
     <div id="deck2-container" style="display:none;">
       
-      <!-- Control Bar -->
+      <!-- Control Bar & Step Builder -->
       <section class="riso-card">
         <div class="card-header">
-          <h2 class="card-title">⚡ REST API Load Deck (Artillery Engine)</h2>
-          <span class="card-subtitle">CONCURRENT TRAFFIC & LATENCY QUANTILE PROFILER</span>
+          <h2 class="card-title">⚡ REST API Load Studio (Postman-like Chaining & Artillery)</h2>
+          <span class="card-subtitle">MULTI-ENDPOINT PIPELINE // TOKEN EXTRACTION // 1–1,000 CONCURRENT VUs</span>
+        </div>
+
+        <!-- Workflow Presets -->
+        <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:1rem; padding:0.75rem; background:var(--color-canvas); border:var(--border-subtle);">
+          <span class="form-label" style="display:flex; align-items:center; margin-right:0.5rem;">Workflow Presets:</span>
+          <button type="button" class="btn btn-secondary" style="font-size:0.8125rem; padding:4px 10px;" onclick="loadApiPreset('auth-chain')">🔑 1. Auth Token Chaining Flow</button>
+          <button type="button" class="btn btn-secondary" style="font-size:0.8125rem; padding:4px 10px;" onclick="loadApiPreset('crud-chain')">📦 2. CRUD Resource Flow</button>
+          <button type="button" class="btn btn-secondary" style="font-size:0.8125rem; padding:4px 10px;" onclick="loadApiPreset('single-url')">⚡ 3. Single URL Benchmark</button>
         </div>
 
         <form id="api-load-form" class="control-grid" onsubmit="handleApiLoadSubmit(event)">
           <div class="form-group">
             <label class="form-label">Suite Name</label>
-            <input type="text" id="api-suite-name" class="form-input" value="REST API Throughput & Load Test" required />
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Target Endpoint URL</label>
-            <input type="url" id="api-target-url" class="form-input" value="https://httpbin.org/get" required />
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">HTTP Method</label>
-            <select id="api-http-method" class="form-select">
-              <option value="GET">GET</option>
-              <option value="POST">POST</option>
-              <option value="PUT">PUT</option>
-              <option value="DELETE">DELETE</option>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Virtual Users (VUs): <span id="api-vu-val">10</span></label>
-            <input type="range" id="api-vu-slider" min="1" max="100" value="10" class="form-input" style="padding:0;" oninput="document.getElementById('api-vu-val').innerText = this.value" />
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Duration (seconds)</label>
-            <input type="number" id="api-duration" class="form-input" value="30" min="5" max="300" />
+            <input type="text" id="api-suite-name" class="form-input" value="REST API Multi-Endpoint Chaining Test" required />
           </div>
 
           <div class="form-group">
@@ -782,25 +765,36 @@ export function generateDashboardHtml(): string {
             </select>
           </div>
 
-          <!-- Advanced Auth & Custom Headers -->
-          <details style="grid-column: 1 / -1; margin-top: 0.5rem; background: var(--color-canvas); padding: 0.75rem; border: var(--border-subtle);">
-            <summary style="font-family: var(--font-mono); font-size: 0.8125rem; font-weight: 700; cursor: pointer; color: var(--color-primary);">
-              ⚙️ Advanced Auth, Custom Headers & User-Agent (Click to expand)
-            </summary>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 0.75rem;">
-              <div class="form-group">
-                <label class="form-label">Custom User-Agent</label>
-                <input type="text" id="api-user-agent" class="form-input" placeholder="e.g. PentestLab-LoadWorker/2.0" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Custom Request Headers (JSON)</label>
-                <textarea id="api-headers-json" class="form-input" rows="2" placeholder='{"Authorization": "Bearer secret_jwt_token", "X-API-Key": "adm_123"}'></textarea>
+          <div class="form-group">
+            <label class="form-label">Duration (seconds)</label>
+            <input type="number" id="api-duration" class="form-input" value="15" min="2" max="300" />
+          </div>
+
+          <!-- 1000 VUs Slider & Number Input Sync -->
+          <div class="form-group" style="grid-column: 1 / -1; background: var(--color-canvas); padding: 0.75rem; border: var(--border-subtle);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.25rem;">
+              <label class="form-label" style="margin-bottom:0;">Concurrent Virtual Users (1 – 1,000 VUs):</label>
+              <div style="display:flex; align-items:center; gap:0.5rem;">
+                <input type="number" id="api-vu-num" class="form-input" min="1" max="1000" value="10" style="width:90px; text-align:center; font-family:var(--font-mono); font-weight:700;" oninput="syncApiVu(this.value)" />
+                <span class="badge badge-success" id="api-vu-badge">10 VUs</span>
               </div>
             </div>
-          </details>
+            <input type="range" id="api-vu-slider" min="1" max="1000" step="5" value="10" class="form-input" style="padding:0; width:100%; cursor:pointer;" oninput="syncApiVu(this.value)" />
+          </div>
+
+          <!-- Visual Step Builder Container -->
+          <div class="step-builder-box" style="grid-column: 1 / -1;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+              <span class="form-label" style="font-size:0.875rem;">Sequential API Requests Pipeline (Postman-like Chaining)</span>
+              <button type="button" class="btn btn-secondary" style="font-size:0.8125rem; padding:4px 10px;" onclick="addApiStep()">+ Add API Request</button>
+            </div>
+            <div id="api-steps-container" style="display:flex; flex-direction:column; gap:0.75rem;">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
 
           <div style="display:flex; gap: 0.75rem; grid-column: 1 / -1; margin-top: 0.5rem;">
-            <button type="submit" id="btn-api-start" class="btn btn-primary" style="flex:2;">▶ START API LOAD RUN</button>
+            <button type="submit" id="btn-api-start" class="btn btn-primary" style="flex:2;">▶ START CONCURRENT API LOAD RUN</button>
             <button type="button" class="btn btn-danger" style="flex:1;" onclick="triggerAbort()">⏹ ABORT</button>
           </div>
         </form>
@@ -1037,6 +1031,221 @@ export function generateDashboardHtml(): string {
 
     renderE2ESteps();
 
+    // ==========================================
+    // DECK 2: POSTMAN-LIKE API STEP BUILDER JS
+    // ==========================================
+    let apiSteps = [
+      {
+        id: 'api-1',
+        name: 'POST Auth Login',
+        url: 'https://httpbin.org/post',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'admin_user', password: 'secret_password_123' }, null, 2),
+        extractVars: { 'authToken': 'json.username' },
+        assertStatus: 200
+      },
+      {
+        id: 'api-2',
+        name: 'GET Protected User Profile',
+        url: 'https://httpbin.org/headers',
+        method: 'GET',
+        headers: { 'Authorization': 'Bearer {{authToken}}', 'Accept': 'application/json' },
+        body: '',
+        extractVars: {},
+        assertStatus: 200
+      }
+    ];
+
+    function syncApiVu(val) {
+      const v = Math.min(1000, Math.max(1, parseInt(val, 10) || 1));
+      document.getElementById('api-vu-slider').value = v;
+      document.getElementById('api-vu-num').value = v;
+      document.getElementById('api-vu-badge').innerText = v + ' VUs';
+    }
+
+    function renderApiSteps() {
+      const container = document.getElementById('api-steps-container');
+      if (!container) return;
+      container.innerHTML = '';
+
+      apiSteps.forEach((step, idx) => {
+        const card = document.createElement('div');
+        card.style.cssText = 'background:#FFFFFF; border:var(--border-subtle); padding:0.75rem; display:flex; flex-direction:column; gap:0.5rem;';
+
+        const methodColors = {
+          GET: '#10B981',
+          POST: '#0077C0',
+          PUT: '#F59E0B',
+          DELETE: '#EF4444',
+          PATCH: '#8B5CF6'
+        };
+
+        const currentMethod = step.method || 'GET';
+        const methodBadgeColor = methodColors[currentMethod] || '#0077C0';
+
+        card.innerHTML = \`
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+            <div style="display:flex; align-items:center; gap:0.5rem; flex:1; min-width:260px;">
+              <span class="badge" style="background:\${methodBadgeColor}; color:#fff; font-weight:700;">#\${idx + 1} \${currentMethod}</span>
+              <input type="text" class="form-input" style="padding:4px 8px; font-weight:700; flex:1;" value="\${step.name || ''}" placeholder="Step Name" oninput="updateApiStep(\${idx}, 'name', this.value)" />
+            </div>
+            <div style="display:flex; gap:0.5rem; align-items:center;">
+              <label style="font-size:0.75rem; font-family:var(--font-mono); font-weight:700;">Assert Status:</label>
+              <input type="number" class="form-input" style="width:70px; padding:4px 6px; font-family:var(--font-mono);" value="\${step.assertStatus || 200}" oninput="updateApiStep(\${idx}, 'assertStatus', parseInt(this.value, 10))" />
+              \${apiSteps.length > 1 ? \`<button type="button" class="btn btn-danger" style="padding:2px 8px; font-size:0.75rem;" onclick="removeApiStep(\${idx})">✕</button>\` : ''}
+            </div>
+          </div>
+
+          <div style="display:flex; gap:0.5rem; align-items:center;">
+            <select class="form-select" style="width:100px; font-weight:700; font-family:var(--font-mono);" onchange="updateApiStep(\${idx}, 'method', this.value)">
+              <option value="GET" \${currentMethod === 'GET' ? 'selected' : ''}>GET</option>
+              <option value="POST" \${currentMethod === 'POST' ? 'selected' : ''}>POST</option>
+              <option value="PUT" \${currentMethod === 'PUT' ? 'selected' : ''}>PUT</option>
+              <option value="DELETE" \${currentMethod === 'DELETE' ? 'selected' : ''}>DELETE</option>
+              <option value="PATCH" \${currentMethod === 'PATCH' ? 'selected' : ''}>PATCH</option>
+            </select>
+            <input type="text" class="form-input" style="flex:1; font-family:var(--font-mono); font-size:0.8125rem;" value="\${step.url || ''}" placeholder="Endpoint URL (e.g. https://api.com/users/{{userId}})" oninput="updateApiStep(\${idx}, 'url', this.value)" />
+          </div>
+
+          <details style="background:var(--color-canvas); padding:0.5rem; border:var(--border-subtle); margin-top:0.25rem;">
+            <summary style="font-family:var(--font-mono); font-size:0.75rem; font-weight:700; cursor:pointer; color:var(--color-primary);">
+              ⚙️ Request Headers, Body & Variable Extraction (Click to configure)
+            </summary>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:0.5rem; margin-top:0.5rem;">
+              <div>
+                <label class="form-label" style="font-size:0.6875rem;">Request Headers (JSON)</label>
+                <textarea class="form-input" rows="2" style="font-size:0.75rem;" placeholder='{"Authorization": "Bearer {{authToken}}"}' oninput="updateApiStepHeaders(\${idx}, this.value)">\${step.headers ? JSON.stringify(step.headers, null, 2) : ''}</textarea>
+              </div>
+              <div>
+                <label class="form-label" style="font-size:0.6875rem;">Request Body / Payload</label>
+                <textarea class="form-input" rows="2" style="font-size:0.75rem;" placeholder='{"username": "test"}' oninput="updateApiStep(\${idx}, 'body', this.value)">\${step.body || ''}</textarea>
+              </div>
+              <div style="grid-column: 1 / -1;">
+                <label class="form-label" style="font-size:0.6875rem;">Extract Response Variables (JSON mapping, e.g. {"authToken": "data.token"})</label>
+                <textarea class="form-input" rows="2" style="font-size:0.75rem;" placeholder='{"authToken": "data.access_token"}' oninput="updateApiStepExtract(\${idx}, this.value)">\${step.extractVars ? JSON.stringify(step.extractVars, null, 2) : ''}</textarea>
+              </div>
+            </div>
+          </details>
+        \`;
+        container.appendChild(card);
+      });
+    }
+
+    function addApiStep() {
+      apiSteps.push({
+        id: 'api-' + (apiSteps.length + 1),
+        name: 'New API Request',
+        url: 'https://httpbin.org/get',
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+        body: '',
+        extractVars: {},
+        assertStatus: 200
+      });
+      renderApiSteps();
+    }
+
+    function removeApiStep(idx) {
+      apiSteps.splice(idx, 1);
+      renderApiSteps();
+    }
+
+    function updateApiStep(idx, field, val) {
+      if (apiSteps[idx]) {
+        apiSteps[idx][field] = val;
+        if (field === 'method') renderApiSteps();
+      }
+    }
+
+    function updateApiStepHeaders(idx, val) {
+      try {
+        apiSteps[idx].headers = val.trim() ? JSON.parse(val) : {};
+      } catch {}
+    }
+
+    function updateApiStepExtract(idx, val) {
+      try {
+        apiSteps[idx].extractVars = val.trim() ? JSON.parse(val) : {};
+      } catch {}
+    }
+
+    function loadApiPreset(preset) {
+      if (preset === 'auth-chain') {
+        apiSteps = [
+          {
+            id: 'api-1',
+            name: '1. POST Auth Login',
+            url: 'https://httpbin.org/post',
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: 'super_admin', password: 'secure_password_999' }, null, 2),
+            extractVars: { 'authToken': 'json.username' },
+            assertStatus: 200
+          },
+          {
+            id: 'api-2',
+            name: '2. GET Profile with Bearer Header',
+            url: 'https://httpbin.org/headers',
+            method: 'GET',
+            headers: { 'Authorization': 'Bearer {{authToken}}', 'Accept': 'application/json' },
+            body: '',
+            extractVars: {},
+            assertStatus: 200
+          }
+        ];
+      } else if (preset === 'crud-chain') {
+        apiSteps = [
+          {
+            id: 'api-1',
+            name: '1. Create Item (POST)',
+            url: 'https://httpbin.org/post',
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ itemName: 'Gadget V2', price: 99 }, null, 2),
+            extractVars: { 'itemId': 'json.itemName' },
+            assertStatus: 200
+          },
+          {
+            id: 'api-2',
+            name: '2. Fetch Item Detail (GET)',
+            url: 'https://httpbin.org/get?item={{itemId}}',
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+            body: '',
+            extractVars: {},
+            assertStatus: 200
+          },
+          {
+            id: 'api-3',
+            name: '3. Delete Item (DELETE)',
+            url: 'https://httpbin.org/delete?item={{itemId}}',
+            method: 'DELETE',
+            headers: { 'Accept': 'application/json' },
+            body: '',
+            extractVars: {},
+            assertStatus: 200
+          }
+        ];
+      } else if (preset === 'single-url') {
+        apiSteps = [
+          {
+            id: 'api-1',
+            name: 'Single Target Throughput',
+            url: 'https://httpbin.org/get',
+            method: 'GET',
+            headers: { 'Accept': '*/*' },
+            body: '',
+            extractVars: {},
+            assertStatus: 200
+          }
+        ];
+      }
+      renderApiSteps();
+    }
+
+    renderApiSteps();
+
     // ApexCharts Setup (Deck 2)
     let chart;
     let rpsSeries = [];
@@ -1119,12 +1328,11 @@ export function generateDashboardHtml(): string {
         item.innerHTML = \`
           <div>
             <strong>#\${data.stepIndex} [\${data.action}] \${data.name}</strong>
-            <span style="font-size:0.75rem; color:var(--color-ink-muted);"> (\${data.durationMs}ms)</span>
-            \${data.errorMessage ? \`<div style="font-size:0.75rem; color:var(--color-danger); margin-top:2px;">⚠️ \${data.errorMessage}</div>\` : ''}
+            <div style="font-size:0.75rem; color:var(--color-ink-muted);">Duration: \${data.durationMs}ms \${data.errorMessage ? '— Error: ' + data.errorMessage : ''}</div>
           </div>
           <div>
             <span class="badge \${data.status === 'PASSED' ? 'badge-success' : 'badge-fail'}">\${data.status}</span>
-            \${data.screenshotUrl ? \`<a href="\${data.screenshotUrl}" target="_blank" class="badge" style="margin-left:6px; text-decoration:none;">📷 VIEW</a>\` : ''}
+            \${data.screenshotUrl ? \`<a href="\${data.screenshotUrl}" target="_blank" class="badge" style="margin-left:6px; text-decoration:none;">📷 SNAPSHOT</a>\` : ''}
           </div>
         \`;
         timeline.prepend(item);
@@ -1213,34 +1421,17 @@ export function generateDashboardHtml(): string {
     async function handleApiLoadSubmit(e) {
       e.preventDefault();
       const suiteName = document.getElementById('api-suite-name').value;
-      const targetUrl = document.getElementById('api-target-url').value;
-      const httpMethod = document.getElementById('api-http-method').value;
       const virtualUsers = parseInt(document.getElementById('api-vu-slider').value, 10);
       const durationSeconds = parseInt(document.getElementById('api-duration').value, 10);
       const loadProfile = document.getElementById('api-load-profile').value;
-      const userAgent = document.getElementById('api-user-agent').value.trim();
-      const headersStr = document.getElementById('api-headers-json').value.trim();
-      let headers = undefined;
-
-      if (headersStr) {
-        try {
-          headers = JSON.parse(headersStr);
-        } catch (err) {
-          alert('Invalid JSON in Custom Request Headers: ' + err.message);
-          return;
-        }
-      }
 
       const payload = {
         suiteName,
         testType: 'ARTILLERY_ONLY',
-        targetUrl,
-        httpMethod,
         virtualUsers,
         durationSeconds,
         loadProfile,
-        userAgent: userAgent || undefined,
-        headers
+        apiSteps
       };
 
       try {

@@ -282,65 +282,121 @@ export class TestExecutionEngine {
 
     // Run real HTTP load test if configured
     let loadSummary: LoadTestFinalSummary | null = null;
-    if ((options.testType === 'ARTILLERY_ONLY' || options.testType === 'HYBRID') && options.targetUrl && (!options.apiSteps || options.apiSteps.length === 0)) {
-      const vus = options.virtualUsers ?? 10;
-      const duration = options.durationSeconds ?? 30;
-      const profile = options.loadProfile ?? 'fixed';
-      const method = options.httpMethod ?? 'GET';
+    if (options.testType === 'ARTILLERY_ONLY' || options.testType === 'HYBRID') {
+      if (options.apiSteps && options.apiSteps.length > 0 && (options.virtualUsers || 1) > 0 && (options.durationSeconds || 0) > 0) {
+        const vus = options.virtualUsers ?? 10;
+        const duration = options.durationSeconds ?? 30;
+        const profile = options.loadProfile ?? 'fixed';
 
-      loadSummary = await this.httpLoadWorker.runLoadTest(
-        {
-          targetUrl: options.targetUrl,
-          httpMethod: method,
-          virtualUsers: vus,
-          durationSeconds: duration,
-          loadProfile: profile,
-          requestTimeoutMs: 10000,
-          abortSignal: this.abortController?.signal,
-          userAgent: options.userAgent,
-          headers: options.headers,
-          body: options.body
-        },
-        (tickMetrics: TickMetrics) => {
-          // Stream each tick's metrics via SSE
-          this.currentStatus.currentRps = tickMetrics.currentRps;
-          this.currentStatus.p95LatencyMs = tickMetrics.p95LatencyMs;
-          this.currentStatus.activeWorkers = tickMetrics.activeVUs;
+        loadSummary = await this.httpLoadWorker.runLoadTest(
+          {
+            targetUrl: options.targetUrl || options.apiSteps[0]?.url || 'http://localhost',
+            virtualUsers: vus,
+            durationSeconds: duration,
+            loadProfile: profile,
+            chainSteps: options.apiSteps,
+            requestTimeoutMs: 10000,
+            abortSignal: this.abortController?.signal,
+            userAgent: options.userAgent,
+            headers: options.headers,
+            body: options.body
+          },
+          (tickMetrics: TickMetrics) => {
+            // Stream each tick's metrics via SSE
+            this.currentStatus.currentRps = tickMetrics.currentRps;
+            this.currentStatus.p95LatencyMs = tickMetrics.p95LatencyMs;
+            this.currentStatus.activeWorkers = tickMetrics.activeVUs;
 
-          this.streamer.broadcast('telemetry', {
-            testRunId: options.id,
-            state: 'RUNNING',
-            activeWorkers: tickMetrics.activeVUs,
-            completedTasks: this.currentStatus.completedTasks,
-            totalTasks: this.currentStatus.totalTasks,
-            currentRps: tickMetrics.currentRps,
-            p95LatencyMs: tickMetrics.p95LatencyMs,
-            p50LatencyMs: tickMetrics.p50LatencyMs,
-            p99LatencyMs: tickMetrics.p99LatencyMs,
-            errorsThisTick: tickMetrics.errorsThisTick,
-            errorRatePercent: tickMetrics.errorRatePercent,
-            totalRequestsSoFar: tickMetrics.totalRequestsSoFar,
-            totalErrorsSoFar: tickMetrics.totalErrorsSoFar,
-            tick: tickMetrics.tick,
-            activeVUs: tickMetrics.activeVUs,
-            timestamp: new Date().toISOString()
-          });
+            this.streamer.broadcast('telemetry', {
+              testRunId: options.id,
+              state: 'RUNNING',
+              activeWorkers: tickMetrics.activeVUs,
+              completedTasks: this.currentStatus.completedTasks,
+              totalTasks: this.currentStatus.totalTasks,
+              currentRps: tickMetrics.currentRps,
+              p95LatencyMs: tickMetrics.p95LatencyMs,
+              p50LatencyMs: tickMetrics.p50LatencyMs,
+              p99LatencyMs: tickMetrics.p99LatencyMs,
+              errorsThisTick: tickMetrics.errorsThisTick,
+              errorRatePercent: tickMetrics.errorRatePercent,
+              totalRequestsSoFar: tickMetrics.totalRequestsSoFar,
+              totalErrorsSoFar: tickMetrics.totalErrorsSoFar,
+              tick: tickMetrics.tick,
+              activeVUs: tickMetrics.activeVUs,
+              timestamp: new Date().toISOString()
+            });
 
-          // Save metric point to SQLite
-          this.storage.addMetricPoint({
-            testRunId: options.id,
-            timestamp: new Date().toISOString(),
-            rps: tickMetrics.currentRps,
-            p50Ms: tickMetrics.p50LatencyMs,
-            p95Ms: tickMetrics.p95LatencyMs,
-            p99Ms: tickMetrics.p99LatencyMs,
-            errorCount: tickMetrics.errorsThisTick
-          });
-        }
-      );
-    } else if (options.testType === 'ARTILLERY_ONLY' || options.testType === 'HYBRID') {
-      // Fallback: simulated aggregation if no target URL
-      const simulatedResponses: LoadResponseItem[] = options.loadConfig?.simulatedResponses ?? [
+            // Save metric point to SQLite
+            this.storage.addMetricPoint({
+              testRunId: options.id,
+              timestamp: new Date().toISOString(),
+              rps: tickMetrics.currentRps,
+              p50Ms: tickMetrics.p50LatencyMs,
+              p95Ms: tickMetrics.p95LatencyMs,
+              p99Ms: tickMetrics.p99LatencyMs,
+              errorCount: tickMetrics.errorsThisTick
+            });
+          }
+        );
+      } else if (options.targetUrl && (!options.apiSteps || options.apiSteps.length === 0)) {
+        const vus = options.virtualUsers ?? 10;
+        const duration = options.durationSeconds ?? 30;
+        const profile = options.loadProfile ?? 'fixed';
+        const method = options.httpMethod ?? 'GET';
+
+        loadSummary = await this.httpLoadWorker.runLoadTest(
+          {
+            targetUrl: options.targetUrl,
+            httpMethod: method,
+            virtualUsers: vus,
+            durationSeconds: duration,
+            loadProfile: profile,
+            requestTimeoutMs: 10000,
+            abortSignal: this.abortController?.signal,
+            userAgent: options.userAgent,
+            headers: options.headers,
+            body: options.body
+          },
+          (tickMetrics: TickMetrics) => {
+            // Stream each tick's metrics via SSE
+            this.currentStatus.currentRps = tickMetrics.currentRps;
+            this.currentStatus.p95LatencyMs = tickMetrics.p95LatencyMs;
+            this.currentStatus.activeWorkers = tickMetrics.activeVUs;
+
+            this.streamer.broadcast('telemetry', {
+              testRunId: options.id,
+              state: 'RUNNING',
+              activeWorkers: tickMetrics.activeVUs,
+              completedTasks: this.currentStatus.completedTasks,
+              totalTasks: this.currentStatus.totalTasks,
+              currentRps: tickMetrics.currentRps,
+              p95LatencyMs: tickMetrics.p95LatencyMs,
+              p50LatencyMs: tickMetrics.p50LatencyMs,
+              p99LatencyMs: tickMetrics.p99LatencyMs,
+              errorsThisTick: tickMetrics.errorsThisTick,
+              errorRatePercent: tickMetrics.errorRatePercent,
+              totalRequestsSoFar: tickMetrics.totalRequestsSoFar,
+              totalErrorsSoFar: tickMetrics.totalErrorsSoFar,
+              tick: tickMetrics.tick,
+              activeVUs: tickMetrics.activeVUs,
+              timestamp: new Date().toISOString()
+            });
+
+            // Save metric point to SQLite
+            this.storage.addMetricPoint({
+              testRunId: options.id,
+              timestamp: new Date().toISOString(),
+              rps: tickMetrics.currentRps,
+              p50Ms: tickMetrics.p50LatencyMs,
+              p95Ms: tickMetrics.p95LatencyMs,
+              p99Ms: tickMetrics.p99LatencyMs,
+              errorCount: tickMetrics.errorsThisTick
+            });
+          }
+        );
+      } else if (!loadSummary) {
+        // Fallback: simulated aggregation if no target URL
+        const simulatedResponses: LoadResponseItem[] = options.loadConfig?.simulatedResponses ?? [
         { statusCode: 200, latencyMs: 22 },
         { statusCode: 200, latencyMs: 28 },
         { statusCode: 200, latencyMs: 35 },
@@ -367,6 +423,7 @@ export class TestExecutionEngine {
       this.currentStatus.currentRps = legacySummary.rps;
       this.currentStatus.p95LatencyMs = legacySummary.latency.p95;
     }
+  }
 
     const durationMs = Date.now() - startTime;
     const finalStatus = this.scheduler?.isAborted || wasAborted ? 'ABORTED' : failedCount > 0 ? 'FAILED' : 'COMPLETED';

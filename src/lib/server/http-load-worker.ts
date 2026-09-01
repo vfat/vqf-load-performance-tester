@@ -1,8 +1,9 @@
 import { calculateQuantiles, type LatencyQuantiles } from './artillery-runner.js';
+import { ApiChainingExecutor, type ApiStepDefinition } from './api-chaining-executor.js';
 
 export interface HttpLoadConfig {
   targetUrl: string;
-  httpMethod: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  httpMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   virtualUsers: number;
   durationSeconds: number;
   loadProfile: 'fixed' | 'ramp-up' | 'spike';
@@ -11,6 +12,7 @@ export interface HttpLoadConfig {
   userAgent?: string;
   headers?: Record<string, string>;
   body?: string;
+  chainSteps?: ApiStepDefinition[];
 }
 
 export interface TickMetrics {
@@ -111,7 +113,8 @@ async function timedFetch(
       method,
       signal: controller.signal,
       headers: finalHeaders,
-      body: ['GET', 'HEAD'].includes(method.toUpperCase()) ? undefined : body
+      body: ['GET', 'HEAD'].includes(method.toUpperCase()) ? undefined : body,
+      keepalive: true
     });
     const latencyMs = Date.now() - start;
     // Consume body to free resources
@@ -135,18 +138,20 @@ function sleep(ms: number): Promise<void> {
 
 export class HttpLoadWorker {
   /**
-   * Run a real HTTP load test against a target URL.
+   * Run a real HTTP load test against a single target URL or a multi-endpoint chained scenario.
    * Emits per-tick metrics via the onTick callback, and returns a final summary.
    */
   async runLoadTest(
     config: HttpLoadConfig,
-    onTick: (metrics: TickMetrics) => void
+    onTick?: (metrics: TickMetrics) => void
   ): Promise<LoadTestFinalSummary> {
     const timeoutMs = config.requestTimeoutMs ?? 10000;
     const allLatencies: number[] = [];
     let totalRequests = 0;
     let totalErrors = 0;
     const tickHistory: TickMetrics[] = [];
+
+    const isChained = Array.isArray(config.chainSteps) && config.chainSteps.length > 0;
 
     for (let tick = 1; tick <= config.durationSeconds; tick++) {
       if (config.abortSignal?.aborted) break;
@@ -160,39 +165,73 @@ export class HttpLoadWorker {
         config.durationSeconds
       );
 
-      // Fire `activeVUs` parallel HTTP requests
-      const promises = Array.from({ length: activeVUs }, () =>
-        timedFetch(
-          config.targetUrl,
-          config.httpMethod,
-          timeoutMs,
-          config.abortSignal,
-          config.headers,
-          config.userAgent,
-          config.body
-        )
-      );
-
-      const results = await Promise.allSettled(promises);
-
-      // Collect metrics for this tick
       const tickLatencies: number[] = [];
       let tickErrors = 0;
 
-      for (const r of results) {
-        totalRequests++;
-        if (r.status === 'fulfilled') {
-          const res = r.value;
-          tickLatencies.push(res.latencyMs);
-          allLatencies.push(res.latencyMs);
-          if (res.statusCode === 0 || res.statusCode >= 400) {
+      if (isChained) {
+        // Execute multi-endpoint chained workflow per Virtual User
+        const chainExecutor = new ApiChainingExecutor();
+        const vuPromises = Array.from({ length: activeVUs }, async (_, vuIdx) => {
+          return chainExecutor.executeChain({
+            testRunId: `vu-${vuIdx + 1}-tick-${tick}`,
+            chainName: `VU-${vuIdx + 1}`,
+            steps: config.chainSteps!,
+            abortSignal: config.abortSignal,
+            stopOnError: false
+          });
+        });
+
+        const chainResults = await Promise.allSettled(vuPromises);
+        for (const res of chainResults) {
+          if (res.status === 'fulfilled') {
+            const chainReport = res.value;
+            for (const step of chainReport.stepDetails) {
+              totalRequests++;
+              tickLatencies.push(step.durationMs);
+              allLatencies.push(step.durationMs);
+              if (step.status === 'FAILED') {
+                tickErrors++;
+                totalErrors++;
+              }
+            }
+          } else {
+            // Whole chain failed
+            totalRequests++;
             tickErrors++;
             totalErrors++;
           }
-        } else {
-          // Promise rejected (shouldn't happen with our timedFetch, but guard)
-          tickErrors++;
-          totalErrors++;
+        }
+      } else {
+        // Fire `activeVUs` parallel single-endpoint HTTP requests
+        const method = config.httpMethod || 'GET';
+        const promises = Array.from({ length: activeVUs }, () =>
+          timedFetch(
+            config.targetUrl,
+            method,
+            timeoutMs,
+            config.abortSignal,
+            config.headers,
+            config.userAgent,
+            config.body
+          )
+        );
+
+        const results = await Promise.allSettled(promises);
+
+        for (const r of results) {
+          totalRequests++;
+          if (r.status === 'fulfilled') {
+            const res = r.value;
+            tickLatencies.push(res.latencyMs);
+            allLatencies.push(res.latencyMs);
+            if (res.statusCode === 0 || res.statusCode >= 400) {
+              tickErrors++;
+              totalErrors++;
+            }
+          } else {
+            tickErrors++;
+            totalErrors++;
+          }
         }
       }
 
@@ -214,7 +253,9 @@ export class HttpLoadWorker {
       };
 
       tickHistory.push(tickMetrics);
-      onTick(tickMetrics);
+      if (onTick) {
+        onTick(tickMetrics);
+      }
 
       // Wait remainder of 1-second interval
       const elapsed = Date.now() - tickStart;
