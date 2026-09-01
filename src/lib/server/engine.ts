@@ -138,27 +138,38 @@ export class TestExecutionEngine {
         steps: options.browserSteps,
         stopOnError: true,
         userAgent: options.userAgent,
-        headers: options.headers
+        headers: options.headers,
+        onStepProgress: (step) => {
+          this.storage.addExecution({
+            testRunId: options.id,
+            scenarioName: `[${step.action}] ${step.name}`,
+            status: step.status,
+            durationMs: step.durationMs,
+            retryCount: 0,
+            errorMessage: step.errorMessage || null,
+            screenshotPath: step.screenshotPath || null
+          });
+
+          const screenshotUrl = step.screenshotPath
+            ? `/api/screenshots/${step.screenshotPath.split('/').pop()}`
+            : null;
+
+          this.streamer.broadcast('step_progress', {
+            testRunId: options.id,
+            deck: 'PLAYWRIGHT_E2E',
+            screenshotUrl,
+            ...step
+          });
+
+          if (screenshotUrl) {
+            this.streamer.broadcast('screenshot_captured', {
+              testRunId: options.id,
+              scenarioName: step.name,
+              screenshotUrl
+            });
+          }
+        }
       });
-
-      // Save each step execution to SQLite
-      for (const step of stepReport.report?.stepDetails || []) {
-        this.storage.addExecution({
-          testRunId: options.id,
-          scenarioName: `[${step.action}] ${step.name}`,
-          status: step.status,
-          durationMs: step.durationMs,
-          retryCount: 0,
-          errorMessage: step.errorMessage || null,
-          screenshotPath: step.screenshotPath || null
-        });
-
-        this.streamer.broadcast('step_progress', {
-          testRunId: options.id,
-          deck: 'PLAYWRIGHT_E2E',
-          ...step
-        });
-      }
 
       if (stepReport.status === 'PASSED') {
         passedCount = options.browserSteps.length;

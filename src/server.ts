@@ -1098,19 +1098,33 @@ export function generateDashboardHtml(): string {
       const data = JSON.parse(e.data);
       if (data.deck === 'PLAYWRIGHT_E2E') {
         const badge = document.getElementById('e2e-live-badge');
-        badge.innerText = \`STEP \${data.stepIndex} [\${data.action}]\`;
+        badge.innerText = 'STEP ' + data.stepIndex + ' [' + data.action + ']';
         badge.className = data.status === 'PASSED' ? 'live-step-badge badge-success' : 'live-step-badge badge-fail';
 
-        if (data.action === 'GOTO' && data.url) {
+        if (data.currentUrl) {
+          document.getElementById('e2e-address-bar').innerText = data.currentUrl;
+        } else if (data.action === 'GOTO' && data.url) {
           document.getElementById('e2e-address-bar').innerText = data.url;
+        }
+
+        if (data.screenshotUrl) {
+          const img = document.getElementById('e2e-live-frame-img');
+          img.src = data.screenshotUrl + '?t=' + Date.now();
         }
 
         const timeline = document.getElementById('e2e-step-timeline');
         const item = document.createElement('div');
         item.className = 'progress-item';
         item.innerHTML = \`
-          <span>#\${data.stepIndex} [\${data.action}] \${data.name} (\${data.durationMs}ms)</span>
-          <span class="badge \${data.status === 'PASSED' ? 'badge-success' : 'badge-fail'}">\${data.status}</span>
+          <div>
+            <strong>#\${data.stepIndex} [\${data.action}] \${data.name}</strong>
+            <span style="font-size:0.75rem; color:var(--color-ink-muted);"> (\${data.durationMs}ms)</span>
+            \${data.errorMessage ? \`<div style="font-size:0.75rem; color:var(--color-danger); margin-top:2px;">⚠️ \${data.errorMessage}</div>\` : ''}
+          </div>
+          <div>
+            <span class="badge \${data.status === 'PASSED' ? 'badge-success' : 'badge-fail'}">\${data.status}</span>
+            \${data.screenshotUrl ? \`<a href="\${data.screenshotUrl}" target="_blank" class="badge" style="margin-left:6px; text-decoration:none;">📷 VIEW</a>\` : ''}
+          </div>
         \`;
         timeline.prepend(item);
       }

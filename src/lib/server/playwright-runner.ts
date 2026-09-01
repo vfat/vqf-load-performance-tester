@@ -4,7 +4,8 @@ import path from 'node:path';
 import { 
   PlaywrightStepExecutor, 
   type BrowserStepDefinition, 
-  type StepExecutionReport 
+  type StepExecutionReport,
+  type StepExecutionDetail
 } from './playwright-step-executor.js';
 
 export interface ScenarioRunOptions {
@@ -32,6 +33,7 @@ export interface StepScenarioOptions {
   stopOnError?: boolean;
   userAgent?: string;
   headers?: Record<string, string>;
+  onStepProgress?: (detail: StepExecutionDetail) => void;
 }
 
 export interface ScenarioExecutionResult {
@@ -169,7 +171,8 @@ export class PlaywrightRunner {
       screenshotDir: options.screenshotDir,
       stopOnError: options.stopOnError,
       userAgent: options.userAgent,
-      headers: options.headers
+      headers: options.headers,
+      onStepProgress: options.onStepProgress
     });
 
     const lastScreenshot = report.stepDetails

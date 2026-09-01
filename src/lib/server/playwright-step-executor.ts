@@ -30,6 +30,7 @@ export interface StepExecutionDetail {
   durationMs: number;
   errorMessage?: string;
   screenshotPath?: string;
+  currentUrl?: string;
 }
 
 export interface ExecuteScenarioOptions {
@@ -100,6 +101,7 @@ export class PlaywrightStepExecutor {
         let stepStatus: 'PASSED' | 'FAILED' = 'PASSED';
         let stepError: string | undefined;
         let stepScreenshotPath: string | undefined;
+        let currentUrl: string | undefined;
 
         try {
           const timeout = step.timeoutMs || 10000;
@@ -113,7 +115,7 @@ export class PlaywrightStepExecutor {
                 // Fallback to load state
                 await page.waitForLoadState('load', { timeout: 5000 });
               }
-              await page.waitForTimeout(400); // hydration buffer
+              await page.waitForTimeout(500); // hydration buffer
               break;
             }
 
@@ -121,6 +123,7 @@ export class PlaywrightStepExecutor {
               if (!step.selector) throw new Error('Action CLICK requires a valid "selector" parameter');
               await page.waitForSelector(step.selector, { timeout });
               await page.click(step.selector, { timeout });
+              await page.waitForTimeout(400); // wait for transition/render
               break;
             }
 
@@ -154,16 +157,23 @@ export class PlaywrightStepExecutor {
             }
 
             case 'SCREENSHOT': {
-              const sanitizedName = step.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
-              const filename = `step-${options.testRunId}-${i + 1}-${sanitizedName}.png`;
-              const filePath = path.join(screenshotDir, filename);
-              await page.screenshot({ path: filePath, fullPage: false });
-              stepScreenshotPath = filePath;
               break;
             }
 
             default:
               throw new Error(`Unsupported step action: ${(step as any).action}`);
+          }
+
+          // Always capture a step visual snapshot for the Live Viewport Frame
+          try {
+            currentUrl = page.url();
+            const sanitizedName = step.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+            const filename = `step-${options.testRunId}-${i + 1}-${sanitizedName}.png`;
+            const filePath = path.join(screenshotDir, filename);
+            await page.screenshot({ path: filePath, fullPage: false });
+            stepScreenshotPath = filePath;
+          } catch {
+            // ignore snapshot failure
           }
         } catch (err: any) {
           stepStatus = 'FAILED';
@@ -173,6 +183,7 @@ export class PlaywrightStepExecutor {
 
           // Capture on-failure screenshot
           try {
+            currentUrl = page.url();
             const failFilename = `fail-${options.testRunId}-step-${i + 1}.png`;
             const failPath = path.join(screenshotDir, failFilename);
             await page.screenshot({ path: failPath, fullPage: false });
@@ -191,7 +202,8 @@ export class PlaywrightStepExecutor {
           status: stepStatus,
           durationMs: Date.now() - stepStartTime,
           errorMessage: stepError,
-          screenshotPath: stepScreenshotPath
+          screenshotPath: stepScreenshotPath,
+          currentUrl
         };
 
         stepDetails.push(stepDetail);
