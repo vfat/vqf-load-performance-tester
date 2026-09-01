@@ -1071,7 +1071,6 @@ export function generateDashboardHtml(): string {
 
       apiSteps.forEach((step, idx) => {
         const card = document.createElement('div');
-        card.style.cssText = 'background:#FFFFFF; border:var(--border-subtle); padding:0.75rem; display:flex; flex-direction:column; gap:0.5rem;';
 
         const methodColors = {
           GET: '#10B981',
@@ -1082,52 +1081,160 @@ export function generateDashboardHtml(): string {
         };
 
         const currentMethod = step.method || 'GET';
-        const methodBadgeColor = methodColors[currentMethod] || '#0077C0';
+        const mColor = methodColors[currentMethod] || '#0077C0';
 
-        card.innerHTML = \`
-          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
-            <div style="display:flex; align-items:center; gap:0.5rem; flex:1; min-width:260px;">
-              <span class="badge" style="background:\${methodBadgeColor}; color:#fff; font-weight:700;">#\${idx + 1} \${currentMethod}</span>
-              <input type="text" class="form-input" style="padding:4px 8px; font-weight:700; flex:1;" value="\${step.name || ''}" placeholder="Step Name" oninput="updateApiStep(\${idx}, 'name', this.value)" />
-            </div>
-            <div style="display:flex; gap:0.5rem; align-items:center;">
-              <label style="font-size:0.75rem; font-family:var(--font-mono); font-weight:700;">Assert Status:</label>
-              <input type="number" class="form-input" style="width:70px; padding:4px 6px; font-family:var(--font-mono);" value="\${step.assertStatus || 200}" oninput="updateApiStep(\${idx}, 'assertStatus', parseInt(this.value, 10))" />
-              \${apiSteps.length > 1 ? \`<button type="button" class="btn btn-danger" style="padding:2px 8px; font-size:0.75rem;" onclick="removeApiStep(\${idx})">✕</button>\` : ''}
-            </div>
-          </div>
+        card.style.cssText = 'background:var(--color-surface); border:var(--border-subtle); border-left:4px solid ' + mColor + '; padding:0.75rem 1rem; display:flex; flex-direction:column; gap:0.625rem;';
 
-          <div style="display:flex; gap:0.5rem; align-items:center;">
-            <select class="form-select" style="width:100px; font-weight:700; font-family:var(--font-mono);" onchange="updateApiStep(\${idx}, 'method', this.value)">
-              <option value="GET" \${currentMethod === 'GET' ? 'selected' : ''}>GET</option>
-              <option value="POST" \${currentMethod === 'POST' ? 'selected' : ''}>POST</option>
-              <option value="PUT" \${currentMethod === 'PUT' ? 'selected' : ''}>PUT</option>
-              <option value="DELETE" \${currentMethod === 'DELETE' ? 'selected' : ''}>DELETE</option>
-              <option value="PATCH" \${currentMethod === 'PATCH' ? 'selected' : ''}>PATCH</option>
-            </select>
-            <input type="text" class="form-input" style="flex:1; font-family:var(--font-mono); font-size:0.8125rem;" value="\${step.url || ''}" placeholder="Endpoint URL (e.g. https://api.com/users/{{userId}})" oninput="updateApiStep(\${idx}, 'url', this.value)" />
-          </div>
+        // Row 1: step badge + name input + assert + remove
+        const row1 = document.createElement('div');
+        row1.style.cssText = 'display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;';
 
-          <details style="background:var(--color-canvas); padding:0.5rem; border:var(--border-subtle); margin-top:0.25rem;">
-            <summary style="font-family:var(--font-mono); font-size:0.75rem; font-weight:700; cursor:pointer; color:var(--color-primary);">
-              ⚙️ Request Headers, Body & Variable Extraction (Click to configure)
-            </summary>
-            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:0.5rem; margin-top:0.5rem;">
-              <div>
-                <label class="form-label" style="font-size:0.6875rem;">Request Headers (JSON)</label>
-                <textarea class="form-input" rows="2" style="font-size:0.75rem;" placeholder='{"Authorization": "Bearer {{authToken}}"}' oninput="updateApiStepHeaders(\${idx}, this.value)">\${step.headers ? JSON.stringify(step.headers, null, 2) : ''}</textarea>
-              </div>
-              <div>
-                <label class="form-label" style="font-size:0.6875rem;">Request Body / Payload</label>
-                <textarea class="form-input" rows="2" style="font-size:0.75rem;" placeholder='{"username": "test"}' oninput="updateApiStep(\${idx}, 'body', this.value)">\${step.body || ''}</textarea>
-              </div>
-              <div style="grid-column: 1 / -1;">
-                <label class="form-label" style="font-size:0.6875rem;">Extract Response Variables (JSON mapping, e.g. {"authToken": "data.token"})</label>
-                <textarea class="form-input" rows="2" style="font-size:0.75rem;" placeholder='{"authToken": "data.access_token"}' oninput="updateApiStepExtract(\${idx}, this.value)">\${step.extractVars ? JSON.stringify(step.extractVars, null, 2) : ''}</textarea>
-              </div>
-            </div>
-          </details>
-        \`;
+        const leftGroup = document.createElement('div');
+        leftGroup.style.cssText = 'display:flex; align-items:center; gap:0.5rem; flex:1; min-width:220px;';
+
+        const badge = document.createElement('span');
+        badge.className = 'badge';
+        badge.style.cssText = 'background:' + mColor + '; color:#fff; font-weight:700; font-size:0.75rem; padding:3px 8px; white-space:nowrap;';
+        badge.textContent = '#' + (idx + 1) + ' ' + currentMethod;
+
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.className = 'form-input';
+        nameInput.style.cssText = 'padding:4px 8px; font-weight:700; flex:1;';
+        nameInput.value = step.name || '';
+        nameInput.placeholder = 'Step Name';
+        nameInput.oninput = function() { updateApiStep(idx, 'name', this.value); };
+
+        leftGroup.appendChild(badge);
+        leftGroup.appendChild(nameInput);
+
+        const rightGroup = document.createElement('div');
+        rightGroup.style.cssText = 'display:flex; gap:0.5rem; align-items:center;';
+
+        const assertLabel = document.createElement('label');
+        assertLabel.style.cssText = 'font-size:0.75rem; font-family:var(--font-mono); font-weight:700; color:var(--color-ink-muted); white-space:nowrap;';
+        assertLabel.textContent = 'Assert:';
+
+        const assertInput = document.createElement('input');
+        assertInput.type = 'number';
+        assertInput.className = 'form-input';
+        assertInput.style.cssText = 'width:65px; padding:4px 6px; font-family:var(--font-mono); text-align:center;';
+        assertInput.value = step.assertStatus || 200;
+        assertInput.oninput = function() { updateApiStep(idx, 'assertStatus', parseInt(this.value, 10)); };
+
+        rightGroup.appendChild(assertLabel);
+        rightGroup.appendChild(assertInput);
+
+        if (apiSteps.length > 1) {
+          const removeBtn = document.createElement('button');
+          removeBtn.type = 'button';
+          removeBtn.className = 'btn btn-danger';
+          removeBtn.style.cssText = 'padding:2px 8px; font-size:0.75rem; line-height:1.4;';
+          removeBtn.textContent = '✕';
+          removeBtn.onclick = function() { removeApiStep(idx); };
+          rightGroup.appendChild(removeBtn);
+        }
+
+        row1.appendChild(leftGroup);
+        row1.appendChild(rightGroup);
+
+        // Row 2: method select + URL input
+        const row2 = document.createElement('div');
+        row2.style.cssText = 'display:flex; gap:0.5rem; align-items:center;';
+
+        const methodSelect = document.createElement('select');
+        methodSelect.className = 'form-select';
+        methodSelect.style.cssText = 'width:105px; font-weight:700; font-family:var(--font-mono); font-size:0.8125rem;';
+        ['GET','POST','PUT','DELETE','PATCH'].forEach(m => {
+          const opt = document.createElement('option');
+          opt.value = m;
+          opt.textContent = m;
+          if (m === currentMethod) opt.selected = true;
+          methodSelect.appendChild(opt);
+        });
+        methodSelect.onchange = function() { updateApiStep(idx, 'method', this.value); };
+
+        const urlInput = document.createElement('input');
+        urlInput.type = 'text';
+        urlInput.className = 'form-input';
+        urlInput.style.cssText = 'flex:1; font-family:var(--font-mono); font-size:0.8125rem;';
+        urlInput.value = step.url || '';
+        urlInput.placeholder = 'https://api.example.com/endpoint/{{variable}}';
+        urlInput.oninput = function() { updateApiStep(idx, 'url', this.value); };
+
+        row2.appendChild(methodSelect);
+        row2.appendChild(urlInput);
+
+        // Row 3: Expandable details (headers, body, extract vars)
+        const details = document.createElement('details');
+        details.style.cssText = 'background:var(--color-canvas); padding:0.5rem 0.75rem; border:var(--border-subtle); margin-top:0.125rem;';
+
+        const summary = document.createElement('summary');
+        summary.style.cssText = 'font-family:var(--font-mono); font-size:0.75rem; font-weight:700; cursor:pointer; color:var(--color-primary);';
+        summary.textContent = '⚙️ Headers, Body & Variable Extraction';
+        details.appendChild(summary);
+
+        const detailGrid = document.createElement('div');
+        detailGrid.style.cssText = 'display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-top:0.5rem;';
+
+        // Headers textarea
+        const hdDiv = document.createElement('div');
+        const hdLabel = document.createElement('label');
+        hdLabel.className = 'form-label';
+        hdLabel.style.cssText = 'font-size:0.6875rem; margin-bottom:2px;';
+        hdLabel.textContent = 'Request Headers (JSON)';
+        const hdArea = document.createElement('textarea');
+        hdArea.className = 'form-input';
+        hdArea.rows = 2;
+        hdArea.style.cssText = 'font-size:0.75rem; font-family:var(--font-mono);';
+        hdArea.placeholder = '{"Authorization": "Bearer {{token}}"}';
+        hdArea.value = step.headers ? JSON.stringify(step.headers, null, 2) : '';
+        hdArea.oninput = function() { updateApiStepHeaders(idx, this.value); };
+        hdDiv.appendChild(hdLabel);
+        hdDiv.appendChild(hdArea);
+
+        // Body textarea
+        const bdDiv = document.createElement('div');
+        const bdLabel = document.createElement('label');
+        bdLabel.className = 'form-label';
+        bdLabel.style.cssText = 'font-size:0.6875rem; margin-bottom:2px;';
+        bdLabel.textContent = 'Request Body / Payload';
+        const bdArea = document.createElement('textarea');
+        bdArea.className = 'form-input';
+        bdArea.rows = 2;
+        bdArea.style.cssText = 'font-size:0.75rem; font-family:var(--font-mono);';
+        bdArea.placeholder = '{"username": "test", "password": "secret"}';
+        bdArea.value = step.body || '';
+        bdArea.oninput = function() { updateApiStep(idx, 'body', this.value); };
+        bdDiv.appendChild(bdLabel);
+        bdDiv.appendChild(bdArea);
+
+        // Extract vars textarea (full width)
+        const exDiv = document.createElement('div');
+        exDiv.style.cssText = 'grid-column: 1 / -1;';
+        const exLabel = document.createElement('label');
+        exLabel.className = 'form-label';
+        exLabel.style.cssText = 'font-size:0.6875rem; margin-bottom:2px;';
+        exLabel.textContent = 'Extract Variables (e.g. {"authToken": "data.token"})';
+        const exArea = document.createElement('textarea');
+        exArea.className = 'form-input';
+        exArea.rows = 2;
+        exArea.style.cssText = 'font-size:0.75rem; font-family:var(--font-mono);';
+        exArea.placeholder = '{"authToken": "data.access_token"}';
+        exArea.value = step.extractVars ? JSON.stringify(step.extractVars, null, 2) : '';
+        exArea.oninput = function() { updateApiStepExtract(idx, this.value); };
+        exDiv.appendChild(exLabel);
+        exDiv.appendChild(exArea);
+
+        detailGrid.appendChild(hdDiv);
+        detailGrid.appendChild(bdDiv);
+        detailGrid.appendChild(exDiv);
+        details.appendChild(detailGrid);
+
+        // Assemble card
+        card.appendChild(row1);
+        card.appendChild(row2);
+        card.appendChild(details);
         container.appendChild(card);
       });
     }
