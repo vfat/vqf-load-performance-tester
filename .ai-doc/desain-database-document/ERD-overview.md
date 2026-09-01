@@ -4,6 +4,8 @@
 
 Dokumen ini mendefinisikan skema tabel **SQLite** (`./data/test_history.db`) untuk **Lean Load Testing & Playwright Platform**. Menggunakan SQLite dengan WAL mode (`PRAGMA journal_mode = WAL;`) memberikan performa write yang cepat tanpa overhead server database terpisah.
 
+**Source of Truth:** [`src/lib/server/storage.ts`](../../src/lib/server/storage.ts)
+
 ---
 
 ## 2. Entity Relationship Diagram (PlantUML IE)
@@ -21,14 +23,21 @@ entity "test_runs" as TEST_RUNS {
   *test_type : TEXT
   *status : TEXT
   target_url : TEXT
-  started_at : DATETIME
-  completed_at : DATETIME
+  started_at : TEXT (ISO 8601)
+  completed_at : TEXT
   total_scenarios : INTEGER
   passed_scenarios : INTEGER
   failed_scenarios : INTEGER
   duration_ms : INTEGER
   summary_json_path : TEXT
   report_html_path : TEXT
+  virtual_users : INTEGER
+  duration_seconds : INTEGER
+  load_profile : TEXT
+  http_method : TEXT
+  avg_latency_ms : REAL
+  total_requests : INTEGER
+  error_rate_percent : REAL
 }
 
 entity "test_executions" as TEST_EXECUTIONS {
@@ -47,7 +56,7 @@ entity "metric_points" as METRIC_POINTS {
   *id : INTEGER <<PK, AUTOINCREMENT>>
   --
   *test_run_id : TEXT <<FK>>
-  *timestamp : DATETIME
+  *timestamp : TEXT (ISO 8601)
   rps : REAL
   p50_ms : REAL
   p95_ms : REAL
@@ -83,7 +92,14 @@ CREATE TABLE IF NOT EXISTS test_runs (
     failed_scenarios INTEGER DEFAULT 0,
     duration_ms INTEGER DEFAULT 0,
     summary_json_path TEXT,
-    report_html_path TEXT
+    report_html_path TEXT,
+    virtual_users INTEGER DEFAULT 1,
+    duration_seconds INTEGER DEFAULT 30,
+    load_profile TEXT DEFAULT 'fixed',
+    http_method TEXT DEFAULT 'GET',
+    avg_latency_ms REAL DEFAULT 0,
+    total_requests INTEGER DEFAULT 0,
+    error_rate_percent REAL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS test_executions (
@@ -114,3 +130,12 @@ CREATE INDEX IF NOT EXISTS idx_runs_date ON test_runs(started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_exec_run ON test_executions(test_run_id);
 CREATE INDEX IF NOT EXISTS idx_metrics_run ON metric_points(test_run_id, timestamp);
 ```
+
+---
+
+## 4. Data Dictionary Reference
+
+Dokumen Data Dictionary detail per-tabel tersedia di folder yang sama:
+- [DD-01-test-runs.md](./DD-01-test-runs.md)
+- [DD-02-test-executions.md](./DD-02-test-executions.md)
+- [DD-03-metric-points.md](./DD-03-metric-points.md)
