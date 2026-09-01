@@ -20,6 +20,8 @@ export interface TargetScenarioOptions {
   targetUrl: string;
   screenshotDir?: string;
   maxRetries?: number;
+  userAgent?: string;
+  headers?: Record<string, string>;
 }
 
 export interface StepScenarioOptions {
@@ -28,6 +30,8 @@ export interface StepScenarioOptions {
   steps: BrowserStepDefinition[];
   screenshotDir?: string;
   stopOnError?: boolean;
+  userAgent?: string;
+  headers?: Record<string, string>;
 }
 
 export interface ScenarioExecutionResult {
@@ -107,7 +111,11 @@ export class PlaywrightRunner {
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
       });
-      const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+      const context = await browser.newContext({
+        viewport: { width: 1280, height: 800 },
+        userAgent: options.userAgent || undefined,
+        extraHTTPHeaders: options.headers || undefined
+      });
       const page = await context.newPage();
 
       // Wait for complete page load, async data fetches, and network idle
@@ -159,7 +167,9 @@ export class PlaywrightRunner {
       scenarioName: options.scenarioName,
       steps: options.steps,
       screenshotDir: options.screenshotDir,
-      stopOnError: options.stopOnError
+      stopOnError: options.stopOnError,
+      userAgent: options.userAgent,
+      headers: options.headers
     });
 
     const lastScreenshot = report.stepDetails

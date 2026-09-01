@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import http from 'node:http';
 import {
   HttpLoadWorker,
   getActiveVUs,
@@ -153,4 +154,45 @@ describe('HttpLoadWorker — core load test execution', () => {
     expect(summary.totalRequests).toBeGreaterThan(0);
     expect(summary.failedRequests).toBeGreaterThan(0);
   }, 20000);
+
+  it('should send custom headers and userAgent during load tests', async () => {
+    const receivedHeaders: any[] = [];
+    const localServer = http.createServer((req, res) => {
+      receivedHeaders.push({
+        auth: req.headers['authorization'],
+        agent: req.headers['user-agent'],
+        customKey: req.headers['x-pentest-key']
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'ok' }));
+    });
+
+    await new Promise<void>((resolve) => localServer.listen(0, '127.0.0.1', () => resolve()));
+    const addr = localServer.address() as any;
+    const localUrl = `http://127.0.0.1:${addr.port}/test-header`;
+
+    const worker = new HttpLoadWorker();
+    const config: HttpLoadConfig = {
+      targetUrl: localUrl,
+      httpMethod: 'GET',
+      virtualUsers: 2,
+      durationSeconds: 1,
+      loadProfile: 'fixed',
+      userAgent: 'CustomSecurityBot/3.0',
+      headers: {
+        'Authorization': 'Bearer secret_jwt_token_999',
+        'X-Pentest-Key': 'pk_live_sec_123'
+      }
+    };
+
+    const summary = await worker.runLoadTest(config, () => {});
+    await new Promise<void>((resolve) => localServer.close(() => resolve()));
+
+    expect(summary.totalRequests).toBeGreaterThan(0);
+    expect(summary.successfulRequests).toBe(summary.totalRequests);
+    expect(receivedHeaders.length).toBeGreaterThan(0);
+    expect(receivedHeaders[0].auth).toBe('Bearer secret_jwt_token_999');
+    expect(receivedHeaders[0].agent).toBe('CustomSecurityBot/3.0');
+    expect(receivedHeaders[0].customKey).toBe('pk_live_sec_123');
+  });
 });

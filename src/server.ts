@@ -653,6 +653,23 @@ export function generateDashboardHtml(): string {
             <input type="range" id="e2e-concurrency" min="1" max="5" value="2" class="form-input" style="padding:0;" oninput="document.getElementById('e2e-concurrency-val').innerText = this.value" />
           </div>
 
+          <!-- Advanced Auth & Custom Headers -->
+          <details style="grid-column: 1 / -1; margin-top: 0.5rem; background: var(--color-canvas); padding: 0.75rem; border: var(--border-subtle);">
+            <summary style="font-family: var(--font-mono); font-size: 0.8125rem; font-weight: 700; cursor: pointer; color: var(--color-primary);">
+              ⚙️ Advanced Auth, Custom Headers & User-Agent (Click to expand)
+            </summary>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 0.75rem;">
+              <div class="form-group">
+                <label class="form-label">Custom User-Agent</label>
+                <input type="text" id="e2e-user-agent" class="form-input" placeholder="e.g. Mozilla/5.0 (Windows NT 10.0; Win64; x64) / CustomPentestAgent/1.0" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Custom Request Headers (JSON)</label>
+                <textarea id="e2e-headers-json" class="form-input" rows="2" placeholder='{"Authorization": "Bearer secret_jwt_token", "X-API-Key": "adm_123"}'></textarea>
+              </div>
+            </div>
+          </details>
+
           <div style="display:flex; gap: 0.75rem; grid-column: 1 / -1; margin-top: 0.5rem;">
             <button type="submit" id="btn-e2e-start" class="btn btn-primary" style="flex:2;">▶ RUN PLAYWRIGHT E2E</button>
             <button type="button" class="btn btn-danger" style="flex:1;" onclick="triggerAbort()">⏹ ABORT</button>
@@ -763,6 +780,23 @@ export function generateDashboardHtml(): string {
               <option value="spike">Spike (Sudden Traffic Burst)</option>
             </select>
           </div>
+
+          <!-- Advanced Auth & Custom Headers -->
+          <details style="grid-column: 1 / -1; margin-top: 0.5rem; background: var(--color-canvas); padding: 0.75rem; border: var(--border-subtle);">
+            <summary style="font-family: var(--font-mono); font-size: 0.8125rem; font-weight: 700; cursor: pointer; color: var(--color-primary);">
+              ⚙️ Advanced Auth, Custom Headers & User-Agent (Click to expand)
+            </summary>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 0.75rem;">
+              <div class="form-group">
+                <label class="form-label">Custom User-Agent</label>
+                <input type="text" id="api-user-agent" class="form-input" placeholder="e.g. PentestLab-LoadWorker/2.0" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Custom Request Headers (JSON)</label>
+                <textarea id="api-headers-json" class="form-input" rows="2" placeholder='{"Authorization": "Bearer secret_jwt_token", "X-API-Key": "adm_123"}'></textarea>
+              </div>
+            </div>
+          </details>
 
           <div style="display:flex; gap: 0.75rem; grid-column: 1 / -1; margin-top: 0.5rem;">
             <button type="submit" id="btn-api-start" class="btn btn-primary" style="flex:2;">▶ START API LOAD RUN</button>
@@ -1125,12 +1159,26 @@ export function generateDashboardHtml(): string {
       e.preventDefault();
       const suiteName = document.getElementById('e2e-suite-name').value;
       const concurrency = parseInt(document.getElementById('e2e-concurrency').value, 10);
+      const userAgent = document.getElementById('e2e-user-agent').value.trim();
+      const headersStr = document.getElementById('e2e-headers-json').value.trim();
+      let headers = undefined;
+
+      if (headersStr) {
+        try {
+          headers = JSON.parse(headersStr);
+        } catch (err) {
+          alert('Invalid JSON in Custom Request Headers: ' + err.message);
+          return;
+        }
+      }
 
       const payload = {
         suiteName,
         testType: 'PLAYWRIGHT_ONLY',
         concurrency,
-        browserSteps: e2eSteps
+        browserSteps: e2eSteps,
+        userAgent: userAgent || undefined,
+        headers
       };
 
       try {
@@ -1155,6 +1203,18 @@ export function generateDashboardHtml(): string {
       const virtualUsers = parseInt(document.getElementById('api-vu-slider').value, 10);
       const durationSeconds = parseInt(document.getElementById('api-duration').value, 10);
       const loadProfile = document.getElementById('api-load-profile').value;
+      const userAgent = document.getElementById('api-user-agent').value.trim();
+      const headersStr = document.getElementById('api-headers-json').value.trim();
+      let headers = undefined;
+
+      if (headersStr) {
+        try {
+          headers = JSON.parse(headersStr);
+        } catch (err) {
+          alert('Invalid JSON in Custom Request Headers: ' + err.message);
+          return;
+        }
+      }
 
       const payload = {
         suiteName,
@@ -1163,7 +1223,9 @@ export function generateDashboardHtml(): string {
         httpMethod,
         virtualUsers,
         durationSeconds,
-        loadProfile
+        loadProfile,
+        userAgent: userAgent || undefined,
+        headers
       };
 
       try {
@@ -1445,7 +1507,10 @@ export function createDashboardServer(options: DashboardServerOptions = {}): htt
             virtualUsers: body.virtualUsers || 10,
             durationSeconds: body.durationSeconds || 30,
             loadProfile: body.loadProfile || 'fixed',
-            httpMethod: body.httpMethod || 'GET'
+            httpMethod: body.httpMethod || 'GET',
+            userAgent: body.userAgent,
+            headers: body.headers,
+            body: body.body
           });
 
           res.writeHead(200, { 'Content-Type': 'application/json' });

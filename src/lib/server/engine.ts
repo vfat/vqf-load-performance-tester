@@ -33,6 +33,9 @@ export interface StartRunOptions {
   durationSeconds?: number;
   loadProfile?: 'fixed' | 'ramp-up' | 'spike';
   httpMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  userAgent?: string;
+  headers?: Record<string, string>;
+  body?: string;
 }
 
 export interface EngineStatus {
@@ -133,7 +136,9 @@ export class TestExecutionEngine {
         testRunId: options.id,
         scenarioName: options.suiteName,
         steps: options.browserSteps,
-        stopOnError: true
+        stopOnError: true,
+        userAgent: options.userAgent,
+        headers: options.headers
       });
 
       // Save each step execution to SQLite
@@ -210,7 +215,9 @@ export class TestExecutionEngine {
             result = await this.playwrightRunner.executeTargetScenario({
               testRunId: options.id,
               scenarioName: sc.name,
-              targetUrl: options.targetUrl
+              targetUrl: options.targetUrl,
+              userAgent: options.userAgent,
+              headers: options.headers
             });
           } else {
             result = await this.playwrightRunner.runScenario({
@@ -278,7 +285,10 @@ export class TestExecutionEngine {
           durationSeconds: duration,
           loadProfile: profile,
           requestTimeoutMs: 10000,
-          abortSignal: this.abortController?.signal
+          abortSignal: this.abortController?.signal,
+          userAgent: options.userAgent,
+          headers: options.headers,
+          body: options.body
         },
         (tickMetrics: TickMetrics) => {
           // Stream each tick's metrics via SSE

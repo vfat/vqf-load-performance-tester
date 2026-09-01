@@ -8,6 +8,9 @@ export interface HttpLoadConfig {
   loadProfile: 'fixed' | 'ramp-up' | 'spike';
   requestTimeoutMs?: number;
   abortSignal?: AbortSignal;
+  userAgent?: string;
+  headers?: Record<string, string>;
+  body?: string;
 }
 
 export interface TickMetrics {
@@ -76,13 +79,16 @@ interface FetchResult {
 }
 
 /**
- * Perform a single timed HTTP fetch with timeout support.
+ * Perform a single timed HTTP fetch with timeout support and custom headers/agent.
  */
 async function timedFetch(
   url: string,
   method: string,
   timeoutMs: number,
-  parentSignal?: AbortSignal
+  parentSignal?: AbortSignal,
+  customHeaders?: Record<string, string>,
+  userAgent?: string,
+  body?: string
 ): Promise<FetchResult> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -95,13 +101,17 @@ async function timedFetch(
 
   const start = Date.now();
   try {
+    const finalHeaders: Record<string, string> = {
+      'User-Agent': userAgent || 'PentestLab-LoadWorker/1.0',
+      'Accept': '*/*',
+      ...(customHeaders || {})
+    };
+
     const response = await fetch(url, {
       method,
       signal: controller.signal,
-      headers: {
-        'User-Agent': 'PentestLab-LoadWorker/1.0',
-        'Accept': '*/*'
-      }
+      headers: finalHeaders,
+      body: ['GET', 'HEAD'].includes(method.toUpperCase()) ? undefined : body
     });
     const latencyMs = Date.now() - start;
     // Consume body to free resources
@@ -152,7 +162,15 @@ export class HttpLoadWorker {
 
       // Fire `activeVUs` parallel HTTP requests
       const promises = Array.from({ length: activeVUs }, () =>
-        timedFetch(config.targetUrl, config.httpMethod, timeoutMs, config.abortSignal)
+        timedFetch(
+          config.targetUrl,
+          config.httpMethod,
+          timeoutMs,
+          config.abortSignal,
+          config.headers,
+          config.userAgent,
+          config.body
+        )
       );
 
       const results = await Promise.allSettled(promises);

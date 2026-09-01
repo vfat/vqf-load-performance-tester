@@ -38,6 +38,8 @@ export interface ExecuteScenarioOptions {
   steps: BrowserStepDefinition[];
   screenshotDir?: string;
   stopOnError?: boolean;
+  userAgent?: string;
+  headers?: Record<string, string>;
   onStepProgress?: (detail: StepExecutionDetail) => void;
 }
 
@@ -85,7 +87,9 @@ export class PlaywrightStepExecutor {
       });
 
       context = await browser.newContext({
-        viewport: { width: 1280, height: 800 }
+        viewport: { width: 1280, height: 800 },
+        userAgent: options.userAgent || undefined,
+        extraHTTPHeaders: options.headers || undefined
       });
 
       page = await context.newPage();

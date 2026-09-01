@@ -34,6 +34,19 @@ describe('PlaywrightStepExecutor (TDD-007)', () => {
           </body>
           </html>
         `);
+      } else if (req.url === '/auth-header-page') {
+        const auth = req.headers['authorization'];
+        const agent = req.headers['user-agent'];
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end(`
+          <!DOCTYPE html>
+          <html>
+          <body>
+            <div id="auth-status">${auth || 'NO_AUTH'}</div>
+            <div id="agent-status">${agent || 'NO_AGENT'}</div>
+          </body>
+          </html>
+        `);
       } else {
         res.writeHead(404);
         res.end();
@@ -122,5 +135,27 @@ describe('PlaywrightStepExecutor (TDD-007)', () => {
 
     expect(report.status).toBe('FAILED');
     expect(report.errorMessage).toBeDefined();
+  });
+
+  it('should send custom userAgent and extra headers in browser context', async () => {
+    const executor = new PlaywrightStepExecutor();
+    const steps: BrowserStepDefinition[] = [
+      { id: 's1', action: 'GOTO', name: 'Open Auth Header Page', url: `${serverUrl}/auth-header-page` },
+      { id: 's2', action: 'ASSERT_TEXT', name: 'Assert Bearer Auth', selector: '#auth-status', expectedText: 'Bearer custom_jwt_token_456' },
+      { id: 's3', action: 'ASSERT_TEXT', name: 'Assert Custom Agent', selector: '#agent-status', expectedText: 'PlaywrightSecurityScanner/2.0' }
+    ];
+
+    const report = await executor.executeScenario({
+      testRunId: 'test-run-auth-agent',
+      scenarioName: 'Auth and User Agent Verification',
+      steps,
+      userAgent: 'PlaywrightSecurityScanner/2.0',
+      headers: {
+        'Authorization': 'Bearer custom_jwt_token_456'
+      }
+    });
+
+    expect(report.status).toBe('PASSED');
+    expect(report.stepsCompleted).toBe(3);
   });
 });
