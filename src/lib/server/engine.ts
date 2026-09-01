@@ -4,6 +4,8 @@ import { TelemetryStreamer } from './streamer.js';
 import { PlaywrightRunner, type ScenarioExecutionResult } from './playwright-runner.js';
 import { ArtilleryRunner, type LoadResponseItem, type LoadRunSummaryResult } from './artillery-runner.js';
 import { HttpLoadWorker, type LoadTestFinalSummary, type TickMetrics } from './http-load-worker.js';
+import { type BrowserStepDefinition } from './playwright-step-executor.js';
+import { ApiChainingExecutor, type ApiStepDefinition, type ApiChainingReport } from './api-chaining-executor.js';
 
 export interface ScenarioDefinition {
   name: string;
@@ -24,6 +26,8 @@ export interface StartRunOptions {
   targetUrl?: string;
   concurrency?: number;
   scenarios?: ScenarioDefinition[];
+  browserSteps?: BrowserStepDefinition[];
+  apiSteps?: ApiStepDefinition[];
   loadConfig?: LoadRunConfig;
   virtualUsers?: number;
   durationSeconds?: number;
@@ -41,13 +45,13 @@ export interface EngineStatus {
   p95LatencyMs: number;
 }
 
-
 export class TestExecutionEngine {
   public storage: SqliteHistoryRepository;
   public streamer: TelemetryStreamer;
   private playwrightRunner: PlaywrightRunner;
   private artilleryRunner: ArtilleryRunner;
   private httpLoadWorker: HttpLoadWorker;
+  private apiChainingExecutor: ApiChainingExecutor;
   private scheduler: TaskScheduler | null = null;
   private abortController: AbortController | null = null;
   
@@ -71,6 +75,7 @@ export class TestExecutionEngine {
     this.playwrightRunner = new PlaywrightRunner();
     this.artilleryRunner = new ArtilleryRunner();
     this.httpLoadWorker = new HttpLoadWorker();
+    this.apiChainingExecutor = new ApiChainingExecutor();
   }
 
   getStatus(): EngineStatus {
@@ -101,13 +106,11 @@ export class TestExecutionEngine {
           }
         ];
 
-
-
     this.currentStatus = {
       state: 'RUNNING',
       currentRunId: options.id,
       activeWorkers: 1,
-      totalTasks: scenarios.length,
+      totalTasks: options.browserSteps ? options.browserSteps.length : scenarios.length,
       completedTasks: 0,
       currentRps: options.loadConfig?.targetRps ?? (options.testType === 'ARTILLERY_ONLY' || options.testType === 'HYBRID' ? 120 : 0),
       p95LatencyMs: 25.0
@@ -124,70 +127,144 @@ export class TestExecutionEngine {
     let failedCount = 0;
     let wasAborted = false;
 
-    // Execute Playwright scenarios via scheduler
-    const taskPromises = scenarios.map((sc) => {
-      return this.scheduler!.enqueue(async () => {
-        if (this.scheduler?.isAborted) return null;
+    // Branch 1: If browserSteps are provided (Deck 1 Playwright Studio Step Flow)
+    if (options.testType === 'PLAYWRIGHT_ONLY' && options.browserSteps && options.browserSteps.length > 0) {
+      const stepReport = await this.playwrightRunner.executeStepScenario({
+        testRunId: options.id,
+        scenarioName: options.suiteName,
+        steps: options.browserSteps,
+        stopOnError: true
+      });
 
-        let result;
-        if (options.targetUrl) {
-          result = await this.playwrightRunner.executeTargetScenario({
-            testRunId: options.id,
-            scenarioName: sc.name,
-            targetUrl: options.targetUrl
-          });
-        } else {
-          result = await this.playwrightRunner.runScenario({
-            testRunId: options.id,
-            scenarioName: sc.name,
-            scenarioFn: async () => {
-              await new Promise((r) => setTimeout(r, sc.durationMs ?? 50));
-              if (sc.shouldFail) {
-                throw new Error(`Assertion failed in ${sc.name}`);
-              }
-            }
-          });
-        }
-
+      // Save each step execution to SQLite
+      for (const step of stepReport.report?.stepDetails || []) {
         this.storage.addExecution({
           testRunId: options.id,
-          scenarioName: result.scenarioName,
-          status: result.status,
-          durationMs: result.durationMs,
-          retryCount: result.retryCount,
-          errorMessage: result.errorMessage,
-          screenshotPath: result.screenshotPath
+          scenarioName: `[${step.action}] ${step.name}`,
+          status: step.status,
+          durationMs: step.durationMs,
+          retryCount: 0,
+          errorMessage: step.errorMessage || null,
+          screenshotPath: step.screenshotPath || null
         });
 
-        if (result.status === 'PASSED') passedCount++;
-        else failedCount++;
+        this.streamer.broadcast('step_progress', {
+          testRunId: options.id,
+          deck: 'PLAYWRIGHT_E2E',
+          ...step
+        });
+      }
 
-        this.currentStatus.completedTasks++;
-        this.streamer.broadcast('scenario_completed', result);
-        if (result.screenshotPath) {
-          this.streamer.broadcast('screenshot_captured', {
+      if (stepReport.status === 'PASSED') {
+        passedCount = options.browserSteps.length;
+      } else {
+        passedCount = stepReport.report?.stepsCompleted || 0;
+        failedCount = 1;
+      }
+
+      this.currentStatus.completedTasks = stepReport.report?.stepsCompleted || 0;
+    } else if (options.testType === 'ARTILLERY_ONLY' && options.apiSteps && options.apiSteps.length > 0) {
+      // Branch 2: If apiSteps are provided (Deck 2 REST API Chaining Flow)
+      const chainReport = await this.apiChainingExecutor.executeChain({
+        testRunId: options.id,
+        chainName: options.suiteName,
+        steps: options.apiSteps,
+        stopOnError: true,
+        abortSignal: this.abortController?.signal
+      });
+
+      for (const step of chainReport.stepDetails) {
+        this.storage.addExecution({
+          testRunId: options.id,
+          scenarioName: `[${step.method}] ${step.name}`,
+          status: step.status,
+          durationMs: step.durationMs,
+          retryCount: 0,
+          errorMessage: step.errorMessage || null,
+          screenshotPath: null
+        });
+
+        this.streamer.broadcast('step_progress', {
+          testRunId: options.id,
+          deck: 'REST_API_LOAD',
+          ...step
+        });
+      }
+
+      if (chainReport.status === 'PASSED') {
+        passedCount = options.apiSteps.length;
+      } else {
+        passedCount = chainReport.stepsCompleted;
+        failedCount = 1;
+      }
+
+      this.currentStatus.completedTasks = chainReport.stepsCompleted;
+    } else {
+      // Branch 3: Standard single target URL / scenarios dispatch
+      const taskPromises = scenarios.map((sc) => {
+        return this.scheduler!.enqueue(async () => {
+          if (this.scheduler?.isAborted) return null;
+
+          let result;
+          if (options.targetUrl) {
+            result = await this.playwrightRunner.executeTargetScenario({
+              testRunId: options.id,
+              scenarioName: sc.name,
+              targetUrl: options.targetUrl
+            });
+          } else {
+            result = await this.playwrightRunner.runScenario({
+              testRunId: options.id,
+              scenarioName: sc.name,
+              scenarioFn: async () => {
+                await new Promise((r) => setTimeout(r, sc.durationMs ?? 50));
+                if (sc.shouldFail) {
+                  throw new Error(`Assertion failed in ${sc.name}`);
+                }
+              }
+            });
+          }
+
+          this.storage.addExecution({
             testRunId: options.id,
             scenarioName: result.scenarioName,
-            screenshotUrl: `/api/screenshots/${result.screenshotPath.split('/').pop()}`
+            status: result.status,
+            durationMs: result.durationMs,
+            retryCount: result.retryCount,
+            errorMessage: result.errorMessage,
+            screenshotPath: result.screenshotPath
           });
-        }
-        this.emitTelemetryUpdate(options.id);
 
-        return result;
+          if (result.status === 'PASSED') passedCount++;
+          else failedCount++;
 
-      }).catch((err) => {
-        if (this.scheduler?.isAborted) {
-          wasAborted = true;
-        }
-        return null;
+          this.currentStatus.completedTasks++;
+          this.streamer.broadcast('scenario_completed', result);
+          if (result.screenshotPath) {
+            this.streamer.broadcast('screenshot_captured', {
+              testRunId: options.id,
+              scenarioName: result.scenarioName,
+              screenshotUrl: `/api/screenshots/${result.screenshotPath.split('/').pop()}`
+            });
+          }
+          this.emitTelemetryUpdate(options.id);
+
+          return result;
+
+        }).catch((err) => {
+          if (this.scheduler?.isAborted) {
+            wasAborted = true;
+          }
+          return null;
+        });
       });
-    });
 
-    await Promise.all(taskPromises);
+      await Promise.all(taskPromises);
+    }
 
     // Run real HTTP load test if configured
     let loadSummary: LoadTestFinalSummary | null = null;
-    if ((options.testType === 'ARTILLERY_ONLY' || options.testType === 'HYBRID') && options.targetUrl) {
+    if ((options.testType === 'ARTILLERY_ONLY' || options.testType === 'HYBRID') && options.targetUrl && (!options.apiSteps || options.apiSteps.length === 0)) {
       const vus = options.virtualUsers ?? 10;
       const duration = options.durationSeconds ?? 30;
       const profile = options.loadProfile ?? 'fixed';

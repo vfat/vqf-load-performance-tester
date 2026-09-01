@@ -1,6 +1,11 @@
 import { chromium } from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
+import { 
+  PlaywrightStepExecutor, 
+  type BrowserStepDefinition, 
+  type StepExecutionReport 
+} from './playwright-step-executor.js';
 
 export interface ScenarioRunOptions {
   testRunId: string;
@@ -17,6 +22,14 @@ export interface TargetScenarioOptions {
   maxRetries?: number;
 }
 
+export interface StepScenarioOptions {
+  testRunId: string;
+  scenarioName: string;
+  steps: BrowserStepDefinition[];
+  screenshotDir?: string;
+  stopOnError?: boolean;
+}
+
 export interface ScenarioExecutionResult {
   testRunId: string;
   scenarioName: string;
@@ -25,9 +38,16 @@ export interface ScenarioExecutionResult {
   retryCount: number;
   errorMessage: string | null;
   screenshotPath: string | null;
+  report?: StepExecutionReport;
 }
 
 export class PlaywrightRunner {
+  private stepExecutor: PlaywrightStepExecutor;
+
+  constructor() {
+    this.stepExecutor = new PlaywrightStepExecutor();
+  }
+
   async runScenario(options: ScenarioRunOptions): Promise<ScenarioExecutionResult> {
     const maxRetries = options.maxRetries ?? 0;
     let attempt = 0;
@@ -77,7 +97,6 @@ export class PlaywrightRunner {
       fs.mkdirSync(screenshotDir, { recursive: true });
     }
 
-
     const sanitizedName = options.scenarioName.replace(/[^a-zA-Z0-9_-]/g, '_');
     const screenshotFilename = `target-${options.testRunId}-${sanitizedName}.png`;
     const screenshotPath = path.join(screenshotDir, screenshotFilename);
@@ -103,8 +122,6 @@ export class PlaywrightRunner {
       await page.waitForTimeout(800);
 
       await page.screenshot({ path: screenshotPath, fullPage: false });
-
-
 
       await context.close();
       await browser.close();
@@ -134,5 +151,30 @@ export class PlaywrightRunner {
         screenshotPath: fs.existsSync(screenshotPath) ? screenshotPath : null
       };
     }
+  }
+
+  async executeStepScenario(options: StepScenarioOptions): Promise<ScenarioExecutionResult> {
+    const report = await this.stepExecutor.executeScenario({
+      testRunId: options.testRunId,
+      scenarioName: options.scenarioName,
+      steps: options.steps,
+      screenshotDir: options.screenshotDir,
+      stopOnError: options.stopOnError
+    });
+
+    const lastScreenshot = report.stepDetails
+      .filter(s => s.screenshotPath)
+      .pop()?.screenshotPath || report.failureScreenshotPath || null;
+
+    return {
+      testRunId: options.testRunId,
+      scenarioName: options.scenarioName,
+      status: report.status,
+      durationMs: report.durationMs,
+      retryCount: 0,
+      errorMessage: report.errorMessage || null,
+      screenshotPath: lastScreenshot,
+      report
+    };
   }
 }

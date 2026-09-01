@@ -18,12 +18,12 @@
 
 | Metric | Count |
 |---|---:|
-| Total targets | 6 |
+| Total targets | 8 |
 | PLANNED | 0 |
 | RED | 0 |
 | GREEN | 0 |
 | REFACTORING | 0 |
-| REFACTORED | 6 |
+| REFACTORED | 8 |
 | BLOCKED | 0 |
 | EXCEPTION | 0 |
 
@@ -39,6 +39,8 @@
 | `TDD-004` | Playwright Runner | Headless browser execution with context isolation | Launches isolated context, executes Playwright scenario, captures duration and assertion status | `tests/playwright-runner.test.ts` | `REFACTORED` | `3 passed (34ms), exit 0` | E2E test worker |
 | `TDD-005` | Artillery Runner | Synthetic HTTP load generation & latency stats | Generates HTTP requests based on profile, calculates quantiles (p50, p95, p99), and emits summary | `tests/artillery-runner.test.ts` | `REFACTORED` | `3 passed (5ms), exit 0` | Load test worker |
 | `TDD-006` | HttpLoadWorker | Real HTTP load testing with VUs, duration, profiles | Sends real fetch() requests, scales VUs per profile (fixed/ramp-up/spike), emits per-tick metrics, handles abort & timeout | `tests/http-load-worker.test.ts` | `REFACTORED` | `8 passed (7544ms), exit 0` | Real HTTP load engine |
+| `TDD-007` | PlaywrightStepExecutor | Deck 1 Playwright E2E step-by-step DOM actions | Executes sequential DOM steps (GOTO, CLICK, FILL, WAIT, ASSERT_TEXT, SCREENSHOT), captures on-failure screenshot, reports timeline | `tests/playwright-step-executor.test.ts` | `REFACTORED` | `3 passed (5293ms), exit 0` | Deck 1 E2E Studio Engine |
+| `TDD-008` | ApiChainingExecutor | Deck 2 REST API chaining & variable interpolation | Executes chained HTTP requests, extracts variables (e.g. {{token}}), performs status & JSON path assertions | `tests/api-chaining-executor.test.ts` | `REFACTORED` | `2 passed (66ms), exit 0` | Deck 2 REST API Engine |
 
 ---
 
