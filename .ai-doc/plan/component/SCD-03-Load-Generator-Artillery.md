@@ -1,42 +1,48 @@
 # SCD-03-Load-Generator-Artillery
 
-> **Status:** Draft / Planned  
-> **Target Component:** Artillery Load Generator  
+> **Status:** Active / Enhanced  
+> **Target Component:** HTTP Load Generator & Quantiles Engine (`src/lib/server/http-load-worker.ts`, `src/lib/server/artillery-runner.ts`)  
 > **Workspace:** `.ai-doc/plan/component/`  
 
 ---
 
 ## 1. Context
 
-Artillery Load Generator adalah komponen worker traffic generator yang bertugas menghasilkan beban HTTP/WebSocket/API volume tinggi (*synthetic high-concurrency traffic*) terhadap target sistem sesuai profil beban yang ditentukan (misal: ramp-up, constant arrival rate, spike test, soak test).
+HTTP Load Generator & Quantiles Engine adalah komponen traffic generator asinkron yang bertugas mengirimkan request HTTP nyata secara paralel dengan jumlah Virtual Users (1–100 VUs), memvariasikan beban sesuai Load Profile (`fixed`, `ramp-up`, `spike`), menghitung statistik persentil latensi secara presisi (p50, p90, p95, p99), serta mengeksekusi request HTTP berantai (*API chaining*) pada skenario kustom.
 
 Posisi dalam sistem:
-* Mengambil skenario load test dari Redis (`queue:artillery`).
-* Menghasilkan jutaan request HTTP/WS dengan concurrency terdistribusi.
-* Mengumpulkan metrik latensi (*p50, p90, p95, p99*), RPS (*requests per second*), throughput, dan error code.
-* Mengalirkan (*stream*) snapshot metrik ke Prometheus / Metrics Collector.
+* Menerima konfigurasi beban dari Test Orchestrator (`engine.ts`).
+* Menjalankan loop eksekusi `fetch()` asinkron per detik ke target endpoint.
+* Menghitung kuantil latensi menggunakan formula *nearest rank*.
+* Menyiarkan metrik per-detik (*ticks*) ke SSE streamer dan menyusun ringkasan akhir (*final summary*).
 
 ---
 
 ## 2. Scope
 
 ### In-Scope:
-* Pembacaan skenario konfigurasi beban Artillery (phases, arrival rates, virtual users count, payload CSV/JSON).
-* Eksekusi load test engine dengan resource CPU/memory yang efisien.
-* Ekspor metrik realtime per-detik / per-fase (latency quantiles, HTTP status codes, socket timeouts).
-* Sinyal graceful termination saat durasi selesai atau saat menerima sinyal cancel.
+* Pengiriman request HTTP asinkron nyata dengan dukungan timeout per-koneksi (default 10 detik).
+* Pengaturan alokasi Virtual Users (1–100 VUs) dan durasi tes (5–300 detik).
+* Implementasi algoritma Load Profile:
+  * `fixed`: Beban konstan dari awal hingga akhir.
+  * `ramp-up`: Peningkatan VU linier dari 1 ke target VU untuk menemukan batas saturasi server.
+  * `spike`: Lonjakan traffic drastis di pertengahan durasi pengujian.
+* Perhitungan statistik latensi: `Min`, `Max`, `Avg`, `p50 (Median)`, `p90`, `p95`, `p99`.
+* Perhitungan metrik throughput (`RPS`) dan tingkat kegagalan (`Error Rate %`).
+* Eksekusi step HTTP berantai dengan ekstraksi variabel JSON (`extractVars`) dan validasi status code (`assertStatus`).
+* Responsif terhadap sinyal abort darurat via `AbortSignal`.
 
 ### Out-of-Scope:
-* Rendering DOM atau menjalankan JavaScript halaman web (didelegasikan ke Playwright Worker).
-* Penjadwalan jangka panjang (dikelola oleh Test Orchestrator).
+* Rendering HTML/CSS/DOM atau eksekusi JavaScript client-side (didelegasikan ke Playwright Worker).
+* Penyimpanan permanen database (didelegasikan ke SQLite Storage).
 
 ---
 
 ## 3. Prerequisite
 
-* Node.js runtime & Artillery CLI / library engine.
-* Akses jaringan dengan bandwidth yang memadai ke target System Under Test.
-* Port / endpoint scraping Prometheus untuk metrik exporter.
+* Node.js runtime (v20+) dengan native `fetch()` dan `AbortController`.
+* Konektivitas jaringan ke endpoint target.
+* Formula kuantil teruji di `artillery-runner.ts`.
 
 ---
 
@@ -44,18 +50,20 @@ Posisi dalam sistem:
 
 | Kode Usecase | Nama Usecase | Deskripsi Singkat |
 |---|---|---|
-| `UC-ART-01` | Ingest Load Profile | Memvalidasi dan memuat file skenario pengujian beban (YAML/JSON). |
-| `UC-ART-02` | Generate Concurrent Traffic | Membangkitkan traffic HTTP/WS sesuai phase ramp-up & target RPS. |
-| `UC-ART-03` | Collect Real-time Latency | Menghitung statistik latensi (p50, p90, p95, p99) dan mendeteksi request failures. |
-| `UC-ART-04` | Export Metrics to Prometheus | Mengekspos metrik ke format Prometheus untuk scraping real-time. |
-| `UC-ART-05` | Emit Load Run Summary | Menyusun ringkasan akhir (total requests, success rate, peak RPS) ke Collector. |
+| `UC-ART-01` | Ingest Load Configuration | Memvalidasi konfigurasi beban (target URL, method, VUs, duration, load profile). |
+| `UC-ART-02` | Generate Concurrent HTTP Traffic | Mengirimkan `activeVUs` request HTTP secara paralel per detik ke endpoint target. |
+| `UC-ART-03` | Scale VUs by Load Profile | Menghitung jumlah VU aktif setiap detik berdasarkan profil `fixed`, `ramp-up`, atau `spike`. |
+| `UC-ART-04` | Calculate Precision Quantiles | Menghitung persentil latensi p50, p90, p95, dan p99 menggunakan metode nearest rank. |
+| `UC-ART-05` | Emit Realtime Tick Metrics | Menghitung RPS, latensi interval, dan error count per detik untuk disiarkan ke SSE Streamer. |
+| `UC-ART-06` | Execute HTTP Step with Variable Extraction | Menembakkan request HTTP pada skenario kustom, mengekstrak nilai JSON ke context, dan memvalidasi HTTP status code. |
+| `UC-ART-07` | Emit Final Performance Summary | Mengagregasi seluruh respons dan menyusun laporan ringkasan performa lengkap (12 metrik). |
 
 ---
 
 ## 5. Catatan Diskusi
 
-* Artillery menyediakan plugin Prometheus (`artillery-plugin-publish-metrics`) atau custom reporter untuk integrasi mulus dengan dashboard Grafana.
-* Untuk load besar, beberapa instance Artillery worker dapat dijalankan paralel dengan konfigurasi pembagian virtual users merata.
+* Seluruh body response di-consume secara cepat dan dilepas dari memory untuk menjaga konsumsi RAM tetap di bawah 30MB selama pengetesan ratusan request per detik.
+* Latensi dihitung dari awal pengiriman byte pertama hingga response stream selesai diterima.
 
 ---
 
@@ -63,6 +71,5 @@ Posisi dalam sistem:
 
 | Item | Tipe | Catatan |
 |---|---|---|
-| Network Saturation | Risiko | Generator traffic yang terlalu agresif pada interface jaringan yang sama dapat mendistorsi hasil pengukuran latensi. |
-| Target Authorization | Asumsi | Skenario pengujian menyertakan token/kredensial autentikasi yang valid untuk target API. |
-| Custom Payload Data | Perlu Dikonfirmasi | Apakah load test membutuhkan injeksi data dynamic dari CSV/Faker generator? |
+| Target Rate Limiting | Risiko | Target server mungkin mengembalikan status 429 jika terkena rate limiter; engine mencatatnya sebagai error rate dan tidak menghentikan keseluruhan tes kecuali di-abort. |
+| VPS Socket Exhaustion | Mitigasi | Hard limit VUs dibatasi maksimal 100 koneksi konkuren untuk menjaga kestabilan socket TCP di VPS. |

@@ -1,43 +1,49 @@
 # SCD-02-Playwright-Worker-Pool
 
-> **Status:** Draft / Planned  
-> **Target Component:** Playwright Worker Pool  
+> **Status:** Active / Enhanced  
+> **Target Component:** Playwright Worker Runner (`src/lib/server/playwright-runner.ts`)  
 > **Workspace:** `.ai-doc/plan/component/`  
 
 ---
 
 ## 1. Context
 
-Playwright Worker Pool adalah kumpulan container/proses worker yang bertugas mengambil job pengujian browser E2E dari antrean Redis (`queue:playwright`), menjalankan skenario browser interaktif secara headless, mengumpulkan trace/screenshot saat terjadi kegagalan, dan mengirimkan hasil eksekusi ke *Result & Metrics Collector*.
+Playwright Worker Runner bertugas mengeksekusi pengujian browser E2E headless Chromium secara terisolasi (`BrowserContext`), menangani penantian hidrasi DOM (`networkidle` + buffer rendering), menangkap bukti screenshot otomatis, dan mengeksekusi aksi interaksi granular (Click, Fill, Wait, Assert) pada skenario kustom.
 
 Posisi dalam sistem:
-* Mengambil (*consume*) job dari antrean Redis.
-* Melakukan interaksi browser terhadap System Under Test (SUT).
-* Mengirimkan status eksekusi, log, artefak (screenshot/video/traces), dan metrik ke Collector.
+* Menerima instruksi eksekusi skenario browser dari Test Orchestrator (`engine.ts`).
+* Melakukan navigasi dan interaksi DOM nyata terhadap System Under Test (SUT).
+* Mengambil tangkapan layar bukti eksekusi ke `./reports/screenshots/`.
+* Mengembalikan hasil terstruktur (`status`, `durationMs`, `screenshotPath`, `errorMessage`) ke Orchestrator & SQLite Storage.
 
 ---
 
 ## 2. Scope
 
 ### In-Scope:
-* Pengelolaan siklus hidup browser context (Chromium/Firefox/WebKit) secara efisien dan terisolasi.
-* Eksekusi skenario Playwright test dengan parameter dinamis (base URL, viewport, credentials, timeouts).
+* Pengelolaan siklus hidup context browser Playwright Chromium headless secara terisolasi (zero cross-contamination).
+* Navigasi URL target dengan strategi `networkidle` (fallback ke window `load` + 800ms hydration delay).
 * Penanganan pengujian *flaky* dengan mekanisme retry terkonfigurasi.
-* Pengambilan artefak failure (screenshot, DOM snapshot, error traces).
-* Pelaporan hasil run per-test case (status, duration, failure reason).
-* Heartbeat pelaporan kesehatan worker ke Redis/Orchestrator.
+* Eksekusi aksi interaktif spesifik per-langkah:
+  * `GOTO`: Navigasi URL.
+  * `CLICK`: Klik elemen DOM via CSS/XPath selector.
+  * `FILL`: Pengisian input field form / textarea.
+  * `WAIT_SELECTOR`: Menunggu elemen muncul di DOM.
+  * `ASSERT_TEXT`: Memvalidasi kecocokan teks pada elemen target.
+  * `SCREENSHOT`: Pengambilan tangkapan layar spesifik per-step.
+* Pelaporan kegagalan terperinci beserta screenshot bukti error.
 
 ### Out-of-Scope:
-* Load generation murni volume tinggi (RPS jutaan) tanpa browser (didelegasikan ke Artillery).
-* Penyimpanan permanen jangka panjang untuk artefak blob besar (disimpan ke object storage atau mounted volume).
+* Pembangkitan traffic HTTP murni volume tinggi tanpa browser (didelegasikan ke HTTP Load Worker).
+* Penyimpanan rekaman video berukuran besar (hanya menyimpan gambar format PNG terkompresi).
 
 ---
 
 ## 3. Prerequisite
 
-* Container environment dengan dependencies browser Playwright (Chromium/Firefox/WebKit).
-* Akses jaringan ke Redis dan target System Under Test (SUT).
-* Resource CPU dan Memory yang teralokasi dengan batasan terdefinisi (misal: 1 CPU & 1GB RAM per worker process).
+* Chromium headless browser binaries terpasang via `playwright install chromium`.
+* Direktori artifact `./reports/screenshots/` tersedia untuk penyimpanan tangkapan layar.
+* Resource memori teralokasi aman (Chromium headless dioptimalkan dengan argumen `--no-sandbox`, `--disable-dev-shm-usage`).
 
 ---
 
@@ -45,18 +51,19 @@ Posisi dalam sistem:
 
 | Kode Usecase | Nama Usecase | Deskripsi Singkat |
 |---|---|---|
-| `UC-PW-01` | Fetch & Claim Job | Mengambil task E2E dari Redis queue dan menandai status worker menjadi busy. |
-| `UC-PW-02` | Execute E2E Scenario | Menjalankan skrip interaksi browser Playwright pada target URL. |
-| `UC-PW-03` | Handle Flaky & Retry | Mendeteksi kegagalan sementara dan melakukan retry sesuai threshold yang diizinkan. |
-| `UC-PW-04` | Capture Artifacts on Failure | Mengambil screenshot, trace file, dan log konsol saat assertion gagal. |
-| `UC-PW-05` | Emit Execution Result | Mengirimkan laporan durasi, assertion result, dan status (`PASSED`/`FAILED`) ke Collector. |
+| `UC-PW-01` | Launch Isolated Browser Context | Menyiapkan context Chromium baru dengan viewport 1280x800 untuk setiap sesi pengetesan. |
+| `UC-PW-02` | Execute Target URL Verification | Membuka URL target, menunggu hidrasi networkidle penuh, dan mengambil tangkapan layar. |
+| `UC-PW-03` | Handle Flaky & Retry | Mendeteksi kegagalan sementara dan melakukan retry otomatis sesuai konfigurasi `maxRetries`. |
+| `UC-PW-04` | Capture Artifact on Failure | Mengambil screenshot dan mencatat pesan error saat terjadi kegagalan navigasi atau assertion. |
+| `UC-PW-05` | Emit Execution Result | Mengirimkan laporan durasi, assertion status (`PASSED`/`FAILED`), dan path screenshot ke Orchestrator. |
+| `UC-PW-06` | Execute Browser Action Steps | Mengeksekusi rangkaian langkah DOM interaktif kustom (`CLICK`, `FILL`, `WAIT_SELECTOR`, `ASSERT_TEXT`) secara berurutan. |
 
 ---
 
 ## 5. Catatan Diskusi
 
-* Setiap worker mengisolasi `BrowserContext` untuk setiap test case agar state/cookies tidak saling mengotori (*zero cross-contamination*).
-* Worker dapat dijalankan sebagai Kubernetes Job pod (scale-to-zero) atau Docker worker container pool yang dinamis.
+* Menggunakan `networkidle` dengan timeout guard 15 detik untuk memastikan Single Page Application (SPA / React / Vue / Svelte) selesai melakukan client-side fetch data sebelum screenshot diambil.
+* Setiap session context langsung ditutup (`context.close()` & `browser.close()`) untuk mencegah kebocoran memori di VPS.
 
 ---
 
@@ -64,6 +71,5 @@ Posisi dalam sistem:
 
 | Item | Tipe | Catatan |
 |---|---|---|
-| Memory Leak | Risiko | Browser headless dapat menyisakan memory leak jika satu process instance hidup terlalu lama; worker harus me-recycle browser process secara berkala. |
-| Headless vs Heave | Asumsi | Default browser dijalankan dalam mode headless Chromium untuk efisiensi resource maksimum. |
-| Storage Artefak | Perlu Dikonfirmasi | Di mana screenshot & video trace disimpan (Local volume / MinIO / S3)? |
+| Memory Guard | Risiko | Headless browser memakan ~100MB–150MB per instance; concurrency Playwright dibatasi 2–4 worker di level TaskScheduler. |
+| Storage Lokasi | Keputusan | Screenshot disimpan di `./reports/screenshots/` terpisah dari direktori dokumentasi `.ai-doc/`. |
