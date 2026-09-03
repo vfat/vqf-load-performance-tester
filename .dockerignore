@@ -1,0 +1,11 @@
+node_modules
+dist
+data
+reports
+server.log
+.git
+.gitignore
+.ai-doc
+.agent
+.gemini
+*.md

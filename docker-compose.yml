@@ -1,0 +1,22 @@
+services:
+  pentest-platform:
+    image: vickyfatrian/vqf-load-tester:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vqf-load-tester
+    restart: unless-stopped
+    ports:
+      - "2087:2087"
+    environment:
+      - PORT=2087
+      - NODE_ENV=production
+    volumes:
+      - ./data:/app/data
+      - ./reports:/app/reports
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:2087/api/status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
